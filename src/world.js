@@ -2,7 +2,12 @@
 import * as THREE from 'three';
 import { buildSetPiece, disposeSetPiece } from './setpieces.js';
 
-const ORB_HOME = [new THREE.Vector3(-13, 3.5, -4), new THREE.Vector3(0.5, 7.5, -12), new THREE.Vector3(13, 2.5, -5)];
+// Memory orbs float low, below the chapter title band (which fills the top ~40% of the screen).
+// Spread evenly across the screen for 3 to 5 memories.
+function orbHome(i, n) {
+  const u = n === 1 ? 0 : i / (n - 1) - 0.5;          // -0.5 .. 0.5
+  return new THREE.Vector3(u * (n > 3 ? 34 : 28), -0.6 - Math.cos(u * Math.PI) * 1.6, -2 + Math.cos(u * Math.PI) * 6 - 3);
+}
 
 export class World {
   constructor(canvas) {
@@ -97,9 +102,10 @@ export class World {
       halo.scale.set(9, 9, 1);
       const ring = new THREE.Mesh(new THREE.RingGeometry(2.4, 2.5, 64), new THREE.MeshBasicMaterial({ color: acc, transparent: true, opacity: 0.5, side: THREE.DoubleSide }));
       g.add(halo, shell, core, ring);
-      g.position.copy(ORB_HOME[i % ORB_HOME.length]);
+      const home = orbHome(i, chapter.memories.length);
+      g.position.copy(home);
       g.scale.setScalar(0.001);
-      g.userData = { i, mem, home: ORB_HOME[i % ORB_HOME.length].clone(), target: ORB_HOME[i % ORB_HOME.length].clone(), shell, ring, halo, collected: false, seed: Math.random() * 10 };
+      g.userData = { i, mem, home: home.clone(), target: home.clone(), shell, ring, halo, collected: false, seed: Math.random() * 10 };
       this.orbGroup.add(g);
       this.orbs.push(g);
     });

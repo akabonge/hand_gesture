@@ -16,7 +16,73 @@ function dot() {
 const pointsMat = (color, size, extra = {}) => new THREE.PointsMaterial({ color, size, map: dot(), transparent: true, blending: add, depthWrite: false, ...extra });
 const lineMat = (color, opacity = 0.8) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, blending: add, depthWrite: false });
 
-/** Kampala: a flock of grey crowned cranes gliding over the hills. */
+
+/* ---- Ugandan wildlife silhouettes (giraffe, elephant, Uganda kob) walking the horizon ---- */
+function silhouettePart(shape, color, outline) {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(new THREE.ShapeGeometry(shape, 12), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false, fog: false })));
+  const pts = shape.getPoints(24); pts.push(pts[0].clone());
+  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: outline, transparent: true, opacity: 0.55, blending: add, depthWrite: false, fog: false })));
+  return g;
+}
+const ellipse = (x, y, rx, ry, rot = 0) => { const sh = new THREE.Shape(); sh.absellipse(x, y, rx, ry, 0, Math.PI * 2, false, rot); return sh; };
+const quad = (pts) => { const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(([x, y]) => sh.lineTo(x, y)); sh.closePath(); return sh; };
+function leg(x, y, len, w, color, outline) {
+  const pivot = new THREE.Group(); pivot.position.set(x, y, 0);
+  pivot.add(silhouettePart(quad([[-w / 2, 0], [w / 2, 0], [w * 0.4, -len], [-w * 0.4, -len]]), color, outline));
+  return pivot;
+}
+function animal(kind, color, outline) {
+  const g = new THREE.Group(), legs = [];
+  const add = (shape) => g.add(silhouettePart(shape, color, outline));
+  if (kind === 'giraffe') {
+    add(ellipse(0, 2.4, 1.2, 0.6, -0.1));
+    add(quad([[0.6, 2.6], [1.0, 2.8], [2.0, 5.4], [1.7, 5.6]]));
+    add(ellipse(1.95, 5.6, 0.45, 0.2, -0.3));
+    for (const x of [-0.8, -0.5, 0.6, 0.9]) legs.push(leg(x, 2.1, 2.1, 0.18, color, outline));
+  } else if (kind === 'elephant') {
+    add(ellipse(0, 2.0, 1.7, 1.15));
+    add(ellipse(1.7, 2.4, 0.75, 0.7));
+    add(quad([[2.2, 2.3], [2.5, 2.2], [2.6, 0.6], [2.4, 0.5]]));               // trunk
+    add(quad([[1.1, 2.9], [1.6, 3.1], [1.5, 1.7], [1.1, 1.9]]));               // ear
+    for (const x of [-1.1, -0.6, 0.6, 1.1]) legs.push(leg(x, 1.2, 1.2, 0.5, color, outline));
+  } else { // Uganda kob: slender antelope with lyre-shaped horns (on Uganda's coat of arms)
+    add(ellipse(0, 1.5, 0.9, 0.38, -0.05));
+    add(quad([[0.6, 1.6], [0.85, 1.7], [1.25, 2.4], [1.05, 2.5]]));
+    add(ellipse(1.25, 2.5, 0.32, 0.16, -0.4));
+    add(quad([[1.15, 2.6], [1.2, 2.6], [1.05, 3.3], [1.0, 3.25]]));
+    add(quad([[1.25, 2.6], [1.3, 2.6], [1.3, 3.35], [1.25, 3.3]]));
+    for (const x of [-0.6, -0.4, 0.45, 0.6]) legs.push(leg(x, 1.25, 1.25, 0.1, color, outline));
+  }
+  legs.forEach((l) => g.add(l));
+  g.userData.legs = legs;
+  return g;
+}
+
+function wildlife(accent) {
+  const group = new THREE.Group(), herd = [];
+  const kinds = [['elephant', 1.0], ['giraffe', 1.0], ['kob', 1.0], ['kob', 0.9], ['giraffe', 0.85], ['elephant', 0.8]];
+  kinds.forEach(([k, sc], i) => {
+    const a = animal(k, 0x140805, accent);
+    a.scale.setScalar(sc * 1.3);
+    a.position.set(-70 + i * 22 + Math.random() * 6, -4.2, -58 - (i % 3) * 5);
+    a.userData.speed = k === 'elephant' ? 1.2 : k === 'giraffe' ? 1.6 : 2.2;
+    a.userData.phase = Math.random() * 6;
+    group.add(a); herd.push(a);
+  });
+  return {
+    group,
+    update(dt, t, wake) {
+      for (const a of herd) {
+        a.position.x += dt * a.userData.speed * (0.4 + wake * 0.6);
+        if (a.position.x > 80) a.position.x = -80;
+        a.userData.legs.forEach((l, k) => { l.rotation.z = Math.sin(t * a.userData.speed * 2.2 + a.userData.phase + (k % 2) * Math.PI) * 0.25; });
+      }
+    },
+  };
+}
+
+/** Kampala: grey crowned cranes gliding over the hills, with elephants, giraffes and kob walking the horizon. */
 function cranes(accent) {
   const group = new THREE.Group(), birds = [];
   for (let i = 0; i < 16; i++) {
@@ -29,9 +95,12 @@ function cranes(accent) {
     group.add(bird); birds.push(bird);
   }
   group.position.set(-70, 16, -55);
+  const flock = group, scene = new THREE.Group(), herd = wildlife(accent);
+  scene.add(flock, herd.group);
   return {
-    group,
+    group: scene,
     update(dt, t, wake) {
+      herd.update(dt, t, wake);
       group.position.x += dt * 6.5;
       if (group.position.x > 80) group.position.x = -80;
       group.position.y = 15 + Math.sin(t * 0.3) * 1.5;
@@ -195,7 +264,197 @@ function dawn(accent) {
   };
 }
 
-export const SET_PIECES = { cranes, river, houses, doors, network, dawn };
+
+/** Canvas text as a camera-facing sprite (place names, music notes). */
+function textSprite(text, color = '#ffffff', size = 64, font = 'Georgia, serif') {
+  const c = document.createElement('canvas'), g = c.getContext('2d');
+  g.font = `${size}px ${font}`;
+  const w = Math.ceil(g.measureText(text).width) + 20;
+  c.width = w; c.height = size * 1.4;
+  g.font = `${size}px ${font}`; g.fillStyle = color; g.textBaseline = 'middle'; g.fillText(text, 10, c.height / 2);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  sp.scale.set(w / size * 2, c.height / size * 2, 1);
+  return sp;
+}
+
+/** Buganda: a fire circle with Bakisimba dancers (stylized silhouettes) and drums. */
+function dance(accent) {
+  const group = new THREE.Group(), dancers = [];
+  const FN = 600, fp = new Float32Array(FN * 3), fs = new Float32Array(FN);
+  for (let i = 0; i < FN; i++) fs[i] = Math.random();
+  const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fp, 3));
+  const fire = new THREE.Points(fg, pointsMat(0xffa040, 0.9));
+  fire.position.set(0, -4.5, -26);
+  group.add(fire);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot(), color: 0xff7a2a, transparent: true, blending: add, depthWrite: false, opacity: 0.6 }));
+  glow.scale.set(30, 30, 1); glow.position.set(0, -2, -26); group.add(glow);
+  const mat = lineMat(accent, 0.95);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2, r = 11;
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(22 * 3), 3));
+    const fig = new THREE.LineSegments(geo, mat);
+    fig.position.set(Math.cos(a) * r, -4.6, -26 + Math.sin(a) * r * 0.6);
+    fig.userData = { phase: i * 0.7, a };
+    group.add(fig); dancers.push(fig);
+  }
+  for (let k = 0; k < 3; k++) {
+    const drum = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.9 - k * 0.15, 0.7 - k * 0.1, 1.6 - k * 0.3, 12)), lineMat(0xffffff, 0.6));
+    drum.position.set(-18 + k * 2.2, -4.2, -16); group.add(drum);
+  }
+  const head = (cx, cy) => { const pts = []; for (let k = 0; k < 6; k++) { const a1 = k / 6 * Math.PI * 2, a2 = (k + 1) / 6 * Math.PI * 2; pts.push([cx + Math.cos(a1) * 0.35, cy + Math.sin(a1) * 0.35], [cx + Math.cos(a2) * 0.35, cy + Math.sin(a2) * 0.35]); } return pts; };
+  return {
+    group,
+    update(dt, t, wake) {
+      for (let i = 0; i < FN; i++) {
+        const u = (fs[i] + t * 0.6) % 1, a = fs[(i * 13) % FN] * Math.PI * 2, r = (1 - u) * 1.6 * fs[(i * 7) % FN];
+        fp[i * 3] = Math.cos(a) * r; fp[i * 3 + 1] = u * 5; fp[i * 3 + 2] = Math.sin(a) * r;
+      }
+      fg.attributes.position.needsUpdate = true;
+      fire.material.opacity = 0.35 + wake * 0.6; glow.material.opacity = 0.25 + wake * 0.5 + Math.sin(t * 9) * 0.04;
+      const beat = t * (0.8 + wake * 1.4);
+      for (const d of dancers) {
+        const ph = beat * Math.PI * 2 + d.userData.phase, hip = Math.sin(ph) * 0.35 * (0.3 + wake), arm = Math.sin(ph + 1) * 0.5;
+        const P = [
+          [0 + hip, 0, -0.5, -1.6], [0 + hip, 0, 0.5, -1.6],          // legs
+          [0, 1.5, 0 + hip, 0],                                         // spine (shoulders to hips)
+          [0, 1.3, -0.9, 0.6 + arm], [0, 1.3, 0.9, 0.6 - arm],         // arms
+          ...head(0, 2.0).map(([x, y], k, arr) => (k % 2 ? null : [x, y, arr[k + 1][0], arr[k + 1][1]])).filter(Boolean),
+        ];
+        const pa = d.geometry.attributes.position.array; pa.fill(0);
+        P.forEach(([x1, y1, x2, y2], k) => { pa.set([x1, y1 + 1.6, 0, x2, y2 + 1.6, 0], k * 6); });
+        d.geometry.attributes.position.needsUpdate = true;
+        d.position.x = Math.cos(d.userData.a + t * 0.08) * 11; d.position.z = -26 + Math.sin(d.userData.a + t * 0.08) * 6.6;
+        d.material.opacity = 0.3 + wake * 0.65;
+      }
+    },
+  };
+}
+
+/** Off the clock: a night soccer pitch under floodlights, a ball looping between players' spots. */
+function pitch(accent) {
+  const group = new THREE.Group(), L = [];
+  const seg = (x1, z1, x2, z2) => L.push(x1, 0, z1, x2, 0, z2);
+  const W = 34, Z0 = -8, Z1 = -70, ZM = (Z0 + Z1) / 2;
+  seg(-W, Z0, W, Z0); seg(W, Z0, W, Z1); seg(W, Z1, -W, Z1); seg(-W, Z1, -W, Z0); seg(-W, ZM, W, ZM);
+  for (let k = 0; k < 48; k++) { const a1 = k / 48 * Math.PI * 2, a2 = (k + 1) / 48 * Math.PI * 2; seg(Math.cos(a1) * 7, ZM + Math.sin(a1) * 7, Math.cos(a2) * 7, ZM + Math.sin(a2) * 7); }
+  for (const z of [Z0, Z1]) { const d = z === Z0 ? -1 : 1; seg(-14, z, -14, z + d * -9); seg(-14, z + d * -9, 14, z + d * -9); seg(14, z + d * -9, 14, z); }
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(L, 3));
+  const lines = new THREE.LineSegments(lg, lineMat(0xffffff, 0.7)); lines.position.y = -4.6; group.add(lines);
+  for (const [x, z] of [[-W - 4, Z0 - 2], [W + 4, Z0 - 2], [-W - 4, Z1 + 2], [W + 4, Z1 + 2]]) {
+    const pole = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, -4.6, z), new THREE.Vector3(x, 16, z)]), lineMat(0xffffff, 0.5));
+    const lamp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot(), color: 0xffffff, transparent: true, blending: add, depthWrite: false }));
+    lamp.scale.set(10, 10, 1); lamp.position.set(x, 16, z); group.add(pole, lamp);
+  }
+  const ball = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(0.8, 1)), lineMat(0xffffff, 1));
+  group.add(ball);
+  const spots = [[-12, -20], [10, -30], [-6, -48], [14, -56], [0, -38]];
+  return {
+    group,
+    update(dt, t, wake) {
+      const k = Math.floor(t / 1.6) % spots.length, u = (t / 1.6) % 1;
+      const [x1, z1] = spots[k], [x2, z2] = spots[(k + 1) % spots.length];
+      ball.position.set(x1 + (x2 - x1) * u, -3.8 + Math.sin(u * Math.PI) * 6, z1 + (z2 - z1) * u);
+      ball.rotation.x += dt * 6; ball.rotation.z += dt * 3;
+      lines.material.opacity = 0.2 + wake * 0.6;
+    },
+  };
+}
+
+/** Music: sweeping spotlights, a mirror ball and floating notes. */
+function stage(accent) {
+  const group = new THREE.Group(), cones = [], notes = [];
+  [0xffd36b, 0xff6bd5, 0x7fd8ff, 0xffffff, 0xffd36b].forEach((c, i) => {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(5, 34, 24, 1, true), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.08, blending: add, depthWrite: false, side: THREE.DoubleSide }));
+    cone.geometry.translate(0, -17, 0);
+    const pivot = new THREE.Group(); pivot.position.set((i - 2) * 14, 26, -40); pivot.add(cone);
+    pivot.userData.phase = i * 1.3; group.add(pivot); cones.push(pivot);
+  });
+  const ballMesh = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.4, 2)), lineMat(0xffffff, 0.7));
+  ballMesh.position.set(0, 20, -40); group.add(ballMesh);
+  for (let i = 0; i < 14; i++) {
+    const n = textSprite(i % 2 ? '♪' : '♫', '#' + new THREE.Color(accent).getHexString(), 64);
+    n.position.set((Math.random() - 0.5) * 60, Math.random() * 20 - 2, -20 - Math.random() * 30);
+    n.userData = { v: 0.6 + Math.random() * 0.8, sway: Math.random() * 6 };
+    group.add(n); notes.push(n);
+  }
+  return {
+    group,
+    update(dt, t, wake) {
+      cones.forEach((p) => { p.rotation.z = Math.sin(t * 0.7 + p.userData.phase) * 0.45; p.rotation.x = Math.cos(t * 0.5 + p.userData.phase) * 0.2; p.children[0].material.opacity = 0.03 + wake * 0.1; });
+      ballMesh.rotation.y += dt * 0.6;
+      notes.forEach((n) => { n.position.y += dt * n.userData.v; n.position.x += Math.sin(t + n.userData.sway) * dt * 0.6; if (n.position.y > 24) n.position.y = -4; n.material.opacity = 0.2 + wake * 0.7; });
+    },
+  };
+}
+
+/** Faith: a stained-glass rose window pouring coloured light, and candles. */
+function cathedral(accent) {
+  const group = new THREE.Group(), panes = [];
+  const jewels = [0xc0392b, 0x2e5eaa, 0xf1c40f, 0x27ae60, 0x8e44ad, 0xe67e22];
+  const cx = 0, cy = 16, cz = -70;
+  for (let ring = 0; ring < 2; ring++) {
+    const n = ring ? 16 : 8, r0 = ring ? 5 : 1.2, r1 = ring ? 11 : 5;
+    for (let k = 0; k < n; k++) {
+      const geo = new THREE.RingGeometry(r0 + 0.15, r1 - 0.15, 6, 1, (k / n) * Math.PI * 2 + 0.02, (Math.PI * 2) / n - 0.04);
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: jewels[(k + ring * 3) % jewels.length], transparent: true, opacity: 0.6, blending: add, depthWrite: false, side: THREE.DoubleSide }));
+      m.position.set(cx, cy, cz); group.add(m); panes.push(m);
+    }
+  }
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.CircleGeometry(11.4, 48)), lineMat(accent, 0.9)); frame.position.set(cx, cy, cz); group.add(frame);
+  const rays = [];
+  for (let i = 0; i < 6; i++) {
+    const g = new THREE.PlaneGeometry(4, 60);
+    const ray = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: jewels[i], transparent: true, opacity: 0.05, blending: add, depthWrite: false, side: THREE.DoubleSide }));
+    ray.position.set(-8 + i * 3.2, cy - 22, cz + 26); ray.rotation.x = -0.75; ray.rotation.z = (i - 2.5) * 0.06;
+    group.add(ray); rays.push(ray);
+  }
+  const C = 24, cp = new Float32Array(C * 3);
+  for (let i = 0; i < C; i++) { cp[i * 3] = (i % 12 - 5.5) * 3; cp[i * 3 + 1] = -3.6; cp[i * 3 + 2] = -18 - Math.floor(i / 12) * 6; }
+  const cg = new THREE.BufferGeometry(); cg.setAttribute('position', new THREE.BufferAttribute(cp, 3));
+  const candles = new THREE.Points(cg, pointsMat(0xffd27a, 1.3));
+  group.add(candles);
+  return {
+    group,
+    update(dt, t, wake) {
+      panes.forEach((m, i) => { m.material.opacity = (0.25 + wake * 0.55) * (0.85 + 0.15 * Math.sin(t * 0.8 + i)); });
+      rays.forEach((r, i) => { r.material.opacity = (0.02 + wake * 0.07) * (0.7 + 0.3 * Math.sin(t * 0.5 + i)); });
+      candles.material.size = 1.1 + Math.sin(t * 11) * 0.12 + Math.sin(t * 7.3) * 0.1;
+      candles.material.opacity = 0.4 + wake * 0.6;
+    },
+  };
+}
+
+/** The road ahead: flight paths from home to Spain, Italy and across Europe. */
+function journey(accent) {
+  const group = new THREE.Group(), trails = [];
+  const home = new THREE.Vector3(-34, 4, -30);
+  const places = [['Spain', -6, 12, -55], ['Italy', 10, 16, -60], ['Europe', 26, 20, -64]];
+  const hl = textSprite('Fredericksburg', '#ffffff', 48); hl.position.copy(home).add(new THREE.Vector3(0, 2.2, 0)); group.add(hl);
+  for (const [name, x, y, z] of places) {
+    const to = new THREE.Vector3(x, y, z), mid = home.clone().lerp(to, 0.5).add(new THREE.Vector3(0, 14, 0));
+    const curve = new THREE.QuadraticBezierCurve3(home, mid, to);
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(60)), lineMat(accent, 0.35));
+    const label = textSprite(name, '#' + new THREE.Color(accent).getHexString(), 64); label.position.copy(to).add(new THREE.Vector3(0, 2.6, 0));
+    const pin = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot(), color: accent, transparent: true, blending: add, depthWrite: false })); pin.scale.set(5, 5, 1); pin.position.copy(to);
+    const dotsGeo = new THREE.BufferGeometry(); dotsGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3));
+    const movers = new THREE.Points(dotsGeo, pointsMat(0xffffff, 1));
+    group.add(line, label, pin, movers); trails.push({ curve, line, label, pin, movers });
+  }
+  return {
+    group,
+    update(dt, t, wake) {
+      trails.forEach((tr, i) => {
+        const a = tr.movers.geometry.attributes.position.array;
+        for (let k = 0; k < 8; k++) tr.curve.getPoint(((t * 0.12 + k / 8 + i * 0.1) % 1)).toArray(a, k * 3);
+        tr.movers.geometry.attributes.position.needsUpdate = true;
+        tr.line.material.opacity = 0.1 + wake * 0.5; tr.label.material.opacity = 0.3 + wake * 0.7;
+        tr.pin.scale.setScalar(4 + Math.sin(t * 2 + i) * 0.8);
+      });
+    },
+  };
+}
+
+export const SET_PIECES = { cranes, dance, river, houses, doors, network, pitch, stage, cathedral, journey, dawn };
 
 export function buildSetPiece(name, accent) {
   const make = SET_PIECES[name];

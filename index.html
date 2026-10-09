@@ -57,11 +57,20 @@
 
 <div id="hint">Open your palm to <span>wake the world</span></div>
 <div id="controls" class="hud">
+  <button id="btn-prev" class="mini nav" aria-label="Previous chapter">&larr;</button>
+  <button id="btn-map" class="mini" aria-label="Chapter map">Chapters</button>
+  <button id="btn-next" class="mini nav" aria-label="Next chapter">&rarr;</button>
   <button id="btn-sound" class="mini" aria-pressed="true">Sound on</button>
   <button id="btn-preview" class="mini" aria-pressed="true">Camera view</button>
 </div>
 <a id="credit" class="hud" href="https://aialo.io" target="_blank" rel="noopener">Built by Alo · aialo.io</a>
 <div id="flash" aria-hidden="true"></div>
+
+<div id="chapmap" role="dialog" aria-label="Chapter map">
+  <div class="map-head"><div class="kicker">Chapter map</div><p>Point and pinch a chapter, or click one. Bring your hands together to close.</p></div>
+  <div id="map-nodes"></div>
+  <button id="map-close" class="mini">Close</button>
+</div>
 
 <div id="titlecard" aria-hidden="true"><div id="tc-num"></div><div id="tc-name"></div></div>
 
@@ -81,7 +90,8 @@
       <div><b>Open palm</b><span>Hold it up to wake the world</span></div>
       <div><b>Pinch</b><span>Grab a glowing memory and pull it close</span></div>
       <div><b>Snap</b><span>Snap your fingers to turn the chapter</span></div>
-      <div><b>Say</b><span>&ldquo;Next&rdquo;, &ldquo;back&rdquo; or &ldquo;Oli otya&rdquo;</span></div>
+      <div><b>Two hands</b><span>Spread them apart to open the chapter map</span></div>
+      <div><b>Say</b><span>&ldquo;Next&rdquo;, &ldquo;map&rdquo; or &ldquo;Oli otya&rdquo;</span></div>
     </div>
     <div class="btns">
       <button id="btn-cam">Start with camera</button>
@@ -89,7 +99,7 @@
       <a class="ghost btnlike" href="?demo">Watch a demo</a>
     </div>
     <small>Best on a laptop in good light, sound on. Video and audio stay in your browser: nothing is recorded or uploaded.</small>
-    <small>Mouse: <b>W</b> wake · click &amp; hold to grab · <b>Space</b> next · <b>&larr;</b> back · <b>M</b> mute</small>
+    <small>Mouse or touch: tap to wake · press &amp; hold a light to grab · swipe or <b>&rarr;</b> next · <b>C</b> chapters · <b>M</b> mute</small>
     <small id="err" role="alert"></small>
   </div>
 </div>

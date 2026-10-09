@@ -72,3 +72,19 @@ test('high-band energy averages the 2.2-9 kHz bins', () => {
   for (let i = 52; i < 209; i++) freq[i] = 200; // ~2.2-9 kHz at 48 kHz / 1024
   assert.ok(highBandEnergy(freq, 48000, 1024) > 190);
 });
+
+test('two hands: together then apart opens, apart then together closes', async () => {
+  const { createSpreadDetector, handsApart } = await import('../src/gestures.js');
+  const spread = createSpreadDetector();
+  const near = handsApart(synthHand(0.45, 0.7), synthHand(0.55, 0.7));
+  const far = handsApart(synthHand(0.15, 0.7), synthHand(0.85, 0.7));
+  assert.ok(near < 2.2 && far > 4.5, `near=${near.toFixed(2)} far=${far.toFixed(2)}`);
+  assert.equal(spread(near, 0), null);
+  assert.equal(spread(far, 500), 'open');
+  assert.equal(spread(far, 600), null, 'holding apart does not re-fire');
+  assert.equal(spread(far, 1200), null);
+  assert.equal(spread(near, 1800), 'close');
+  const slow = createSpreadDetector();
+  slow(near, 0);
+  assert.equal(slow(far, 3000), null, 'too slow is not a spread');
+});

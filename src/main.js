@@ -1,9 +1,10 @@
 import { STORY } from './story.js';
 import { World } from './world.js';
 import { demoFrame } from './demo.js';
+import { createMusic } from './music.js';
 import {
   pinchRatio, snapRatio, isOpenPalm, pointerFrom, createPinchTracker,
-  highBandEnergy, createSnapDetector, createPoseSnap,
+  highBandEnergy, createSnapDetector, createPoseSnap, handsApart, createSpreadDetector,
 } from './gestures.js';
 
 const VISION_VERSION = '0.10.14';
@@ -26,6 +27,7 @@ const el = {
   progress: $('progress'), memCount: $('mem-count'), chipCam: $('chip-cam'), chipMic: $('chip-mic'),
   chipGesture: $('chip-gesture'), gestureTxt: $('gesture-txt'), btnSound: $('btn-sound'), btnPreview: $('btn-preview'),
   video: $('cam'), handCanvas: $('hand'), status: $('sr-status'), cardMeta: $('c-meta'),
+  chapmap: $('chapmap'), mapNodes: $('map-nodes'),
   boot: $('boot'), bootLog: $('boot-log'), titleCard: $('titlecard'), tcNum: $('tc-num'), tcName: $('tc-name'), chipOli: $('chip-oli'),
 };
 STORY.forEach(() => el.progress.appendChild(document.createElement('i')));
@@ -41,6 +43,7 @@ const world = new World($('scene'));
 const pinchTracker = createPinchTracker();
 const snapDetector = createSnapDetector();
 const poseSnap = createPoseSnap();
+const spread = createSpreadDetector();
 
 /* ------------------------------------------------------------ CHAPTERS */
 function setChapter(ch, instant = false) {
@@ -54,6 +57,7 @@ function setChapter(ch, instant = false) {
   [...el.progress.children].forEach((n, i) => n.classList.toggle('on', i <= ch));
   el.kicker.textContent = c.kicker; el.h1.innerHTML = c.title; el.line.textContent = c.line;
   el.title.classList.remove('show'); el.card.classList.remove('show'); el.caption.classList.remove('show');
+  document.body.classList.remove('reading');
   stopVoice();
   pad.setChapter(ch);
   if (!instant) showTitleCard(ch);
@@ -72,8 +76,16 @@ function wakeUp() {
   announce(STORY[S.ch].line);
 }
 
+function goTo(index) {
+  if (index === S.ch) { closeMap(); return; }
+  goChapter(index - S.ch);
+}
+
 function goChapter(delta) {
-  if (S.transition > 0) return;
+  // Wall-clock lock (not the animation value) so slow devices can't get stuck.
+  if (performance.now() - (S.lastTurn || -1e9) < 700) return;
+  S.lastTurn = performance.now();
+  closeMap();
   el.flash.classList.remove('go'); void el.flash.offsetWidth; el.flash.classList.add('go');
   sfx('snap');
   S.transition = 1;
@@ -106,6 +118,7 @@ function tryGrab() {
   el.cardH.textContent = m.t; el.cardP.textContent = m.p;
   if (m.img) { el.cardImg.src = m.img; el.cardImg.alt = m.t; el.cardImg.hidden = false; } else { el.cardImg.hidden = true; el.cardImg.removeAttribute('src'); }
   el.card.classList.add('show');
+  document.body.classList.add('reading');
   announce(`${m.t}. ${m.p}`);
   if (m.voice) playVoice(m.voice, null);
   if (!u.collected) { u.collected = true; S.collected++; updateMemCount(); }
@@ -114,10 +127,65 @@ function tryGrab() {
 function releaseGrab() {
   if (!world.grabbed) return;
   world.release();
-  setTimeout(() => { if (!world.grabbed) el.card.classList.remove('show'); }, 1600);
+  setTimeout(() => { if (!world.grabbed) { el.card.classList.remove('show'); document.body.classList.remove('reading'); } }, 1600);
   if (S.collected >= STORY[S.ch].memories.length) {
     hint(S.mode === 'mouse' ? 'Press <b>Space</b> to turn the chapter' : '<span>Snap your fingers</span> to turn the chapter');
   }
+}
+
+/* ------------------------------------------------------- CHAPTER MAP */
+// Opened by spreading both hands apart (or the Chapters button / C key / saying "map").
+STORY.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.className = 'map-node';
+  b.innerHTML = `<i></i><span>${String(i + 1).padStart(2, '0')}</span><b></b>`;
+  b.querySelector('b').textContent = c.name;
+  b.style.setProperty('--c', '#' + new THREE_COLOR(c.accent));
+  const a = Math.PI * (0.92 - (i / (STORY.length - 1)) * 0.84);
+  b.style.left = `${50 + Math.cos(a) * 40}%`;
+  b.style.top = `${78 - Math.sin(a) * 52 + (i % 2) * 6}%`;
+  b.onclick = () => goTo(i);
+  el.mapNodes.appendChild(b);
+});
+function THREE_COLOR(hex) { return hex.toString(16).padStart(6, '0'); }
+function openMap() {
+  if (S.mapOpen) return;
+  S.mapOpen = true; el.chapmap.classList.add('show');
+  [...el.mapNodes.children].forEach((n, i) => n.classList.toggle('here', i === S.ch));
+  sfx('wake'); announce('Chapter map open. Point and pinch a chapter, or bring your hands together to close.');
+}
+function closeMap() {
+  if (!S.mapOpen) return;
+  S.mapOpen = false; el.chapmap.classList.remove('show');
+  [...el.mapNodes.children].forEach((n) => n.classList.remove('hover'));
+}
+$('map-close').onclick = closeMap;
+function mapHover() {
+  if (!S.mapOpen) return -1;
+  let best = -1, bd = Math.max(70, innerWidth * 0.07);
+  [...el.mapNodes.children].forEach((n, i) => {
+    const r = n.querySelector('i').getBoundingClientRect(), d = Math.hypot(r.x + r.width / 2 - S.smooth.x * innerWidth, r.y + r.height / 2 - S.smooth.y * innerHeight);
+    if (d < bd) { bd = d; best = i; }
+  });
+  [...el.mapNodes.children].forEach((n, i) => n.classList.toggle('hover', i === best));
+  return best;
+}
+
+/** Camera frames can contain 0-2 hands. One hand drives everything; two hands add the spread gesture. */
+function handleHands(hands, now) {
+  S.hands = hands;
+  if (hands.length >= 2) {
+    const ev = spread(handsApart(hands[0], hands[1]), now);
+    if (ev === 'open') openMap();
+    if (ev === 'close') closeMap();
+  }
+  // Primary hand: the one closest to where the pointer already is (keeps grabs steady).
+  let primary = hands[0] || null;
+  if (hands.length > 1 && S.pointer.seen) {
+    const d = (h) => { const p = pointerFrom(h); return Math.hypot(p.x - S.pointer.x, p.y - S.pointer.y); };
+    primary = d(hands[0]) <= d(hands[1]) ? hands[0] : hands[1];
+  }
+  handleLandmarks(primary, now);
 }
 
 /* ----------------------------------------------------------- GESTURES */
@@ -133,7 +201,7 @@ function handleLandmarks(lm, now) {
   const pr = pinchRatio(lm), sr = snapRatio(lm);
   const pinch = pinchTracker(pr);
   S.pinching = pinch.pinching;
-  if (pinch.event === 'start') tryGrab();
+  if (pinch.event === 'start') { if (S.mapOpen) { const i = mapHover(); if (i >= 0) goTo(i); } else tryGrab(); }
   if (pinch.event === 'end') releaseGrab();
 
   const open = isOpenPalm(lm);
@@ -168,6 +236,7 @@ function listenForSnap(now) {
 let landmarker = null, lastVideoTime = -1;
 async function startCamera() {
   S.mode = 'camera';
+  document.body.classList.add('mode-camera');
   el.intro.classList.add('gone');
   hint('Loading hand tracking\u2026');
   unlockAudio();
@@ -221,7 +290,7 @@ async function createLandmarker() {
   try { const r = await fetch(MODEL_LOCAL, { method: 'HEAD' }); if (r.ok) model = MODEL_LOCAL; } catch { /* use remote */ }
   const opts = (delegate) => ({
     baseOptions: { modelAssetPath: model, delegate },
-    runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+    runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
   });
   try { return await vision.HandLandmarker.createFromOptions(files, opts('GPU')); }
   catch { return await vision.HandLandmarker.createFromOptions(files, opts('CPU')); }
@@ -231,7 +300,7 @@ function pollCamera(now) {
   if (!landmarker || el.video.readyState < 2 || el.video.currentTime === lastVideoTime) return;
   lastVideoTime = el.video.currentTime;
   const r = landmarker.detectForVideo(el.video, now);
-  handleLandmarks(r.landmarks?.[0] ?? null, now);
+  handleHands(r.landmarks || [], now);
 }
 
 function fallBackToMouse(message) {
@@ -244,20 +313,34 @@ function fallBackToMouse(message) {
 /* ------------------------------------------------------------- MOUSE */
 function startMouse(keepIntro = false) {
   S.mode = 'mouse';
+  document.body.classList.remove('mode-camera'); document.body.classList.add('mode-mouse');
   unlockAudio();
   pad.setChapter(S.ch);
   if (keepIntro) setTimeout(() => el.intro.classList.add('gone'), 2200); else el.intro.classList.add('gone');
   hint('Press <b>W</b> or click to <span>wake the world</span>');
 }
 addEventListener('pointermove', (e) => { if (S.mode !== 'mouse') return; S.pointer.x = e.clientX / innerWidth; S.pointer.y = e.clientY / innerHeight; S.pointer.seen = true; });
+let downAt = null;
 addEventListener('pointerdown', (e) => {
-  if (S.mode !== 'mouse' || e.target.closest('button, a')) return;
+  if (S.mode !== 'mouse' || e.target.closest('button, a, #chapmap')) return;
   S.pointer.x = e.clientX / innerWidth; S.pointer.y = e.clientY / innerHeight; S.pointer.seen = true;
+  downAt = { x: e.clientX, y: e.clientY, t: performance.now() };
   if (!S.awake) { wakeUp(); return; }
   S.pinching = true; S.smooth.x = S.pointer.x; S.smooth.y = S.pointer.y;
   tryGrab(); setGesture('Pinch', true);
 });
-addEventListener('pointerup', () => { if (S.mode !== 'mouse') return; S.pinching = false; releaseGrab(); setGesture('Hand', false); });
+addEventListener('pointerup', (e) => {
+  if (S.mode !== 'mouse') return;
+  // A quick horizontal swipe on empty space turns the chapter (phones and trackpads).
+  // On touch, a fast fling counts as a swipe even if it started on a memory.
+  if (downAt && (!world.grabbed || e.pointerType === 'touch')) {
+    const dx = e.clientX - downAt.x, dy = e.clientY - downAt.y;
+    const speed = Math.abs(dx) / Math.max(1, performance.now() - downAt.t); // px per ms
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && speed > 0.12) goChapter(dx < 0 ? 1 : -1);
+  }
+  downAt = null;
+  S.pinching = false; releaseGrab(); setGesture('Hand', false);
+});
 addEventListener('keydown', (e) => {
   if (!S.mode) return;
   if (e.code === 'KeyW') wakeUp();
@@ -265,14 +348,20 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'ArrowLeft') goChapter(-1);
   else if (e.code === 'KeyM') toggleSound();
   else if (e.code === 'KeyP') togglePreview();
+  else if (e.code === 'KeyC') (S.mapOpen ? closeMap : openMap)();
+  else if (e.code === 'Escape') closeMap();
 });
 $('btn-cam').onclick = startCamera;
 $('btn-mouse').onclick = () => startMouse(false);
 el.btnSound.onclick = toggleSound;
 el.btnPreview.onclick = togglePreview;
+$('btn-next').onclick = () => { if (!S.awake) wakeUp(); else goChapter(1); };
+$('btn-prev').onclick = () => goChapter(-1);
+$('btn-map').onclick = () => (S.mapOpen ? closeMap : openMap)();
 
 function toggleSound() {
   S.sound = !S.sound;
+  if (S.sound) { unlockAudio(); pad.setChapter(S.ch); }
   el.btnSound.setAttribute('aria-pressed', String(S.sound));
   el.btnSound.textContent = S.sound ? 'Sound on' : 'Sound off';
   if (!S.sound) stopVoice();
@@ -328,39 +417,26 @@ const boot = {
   end(delay) { setTimeout(() => { el.boot.classList.remove('show'); document.body.classList.remove('cinema'); }, delay); },
 };
 
-/* -------------------------------------------- AMBIENT SCORE (generated) */
-// A soft chord per chapter, synthesized live: no audio files, no licensing.
-const CHORDS = [[110, 164.8, 220, 277.2], [98, 146.8, 196, 246.9], [130.8, 196, 261.6, 329.6], [116.5, 174.6, 233.1, 293.7], [87.3, 130.8, 174.6, 220], [146.8, 220, 293.7, 370]];
+/* ------------------------------------------- LIVE ACOUSTIC SCORE */
+// Composed in the browser per chapter (see src/music.js and `music` in story.js).
+const score = createMusic();
 const pad = {
-  nodes: null,
-  ensure() {
-    if (this.nodes || !audioCtx) return;
-    const master = audioCtx.createGain(); master.gain.value = 0;
-    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; lp.Q.value = 0.7;
-    lp.connect(master); master.connect(audioCtx.destination);
-    const oscs = [0, 1, 2, 3].map((i) => {
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.type = i % 2 ? 'triangle' : 'sine'; o.detune.value = (i - 1.5) * 4; g.gain.value = 0.22;
-      o.connect(g); g.connect(lp); o.start(); return o;
-    });
-    this.nodes = { master, oscs };
-  },
   setChapter(ch) {
-    this.ensure();
-    if (!this.nodes) return;
-    const now = audioCtx.currentTime;
-    CHORDS[ch % CHORDS.length].forEach((f, i) => this.nodes.oscs[i].frequency.setTargetAtTime(f, now, 0.8));
+    if (!audioCtx) return;
+    score.play(audioCtx, STORY[ch].music || 'piano');
     this.level();
   },
   level() {
-    if (!this.nodes) return;
-    const target = S.sound && S.mode && S.mode !== 'demo' ? (voice.paused ? 0.05 : 0.018) : 0;
-    this.nodes.master.gain.setTargetAtTime(target, audioCtx.currentTime, 0.6);
+    if (!audioCtx) return;
+    const on = S.sound && S.mode;
+    score.setLevel(on ? (voice.paused ? 0.55 : 0.18) : 0);
   },
 };
 
 /* ------------------------------------------------ OLI VOICE COMMANDS */
 const COMMANDS = [
+  [/\b(map|chapters|show chapters)\b/, () => openMap()],
+  [/\b(close|close map)\b/, () => closeMap()],
   [/\b(next|forward|continue|go on)\b/, () => goChapter(1)],
   [/\b(back|previous)\b/, () => goChapter(-1)],
   [/\b(wake|oli otya|hello|hi oli|hey oli|start)\b/, () => wakeUp()],
@@ -408,17 +484,18 @@ function runDemo(now, clock) {
     const o = world.orbs[i]; if (!o) return null;
     const p = world.screenOf(o); return [p.x / innerWidth, p.y / innerHeight];
   }, innerWidth / innerHeight);
-  handleLandmarks(landmarks, now);
+  handleHands([landmarks], now);
   if (snapKey !== null) { const key = `${loop}:${snapKey}`; if (!demoFired.has(key)) { demoFired.add(key); goChapter(1); } }
 }
 
 /* ----------------------------------------------------- HAND OVERLAY */
 const hx = el.handCanvas.getContext('2d');
-const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 let dpr = 1;
 function drawHand(now) {
   const W = el.handCanvas.width, H = el.handCanvas.height;
-  hx.clearRect(0, 0, W, H);
+  // Re-assigning the size fully resets the canvas. (clearRect left ghost hands behind after
+  // shadowed drawImage calls in some GPU/software rasterizers.)
+  el.handCanvas.width = W;
   const acc = '#' + world.colors.accent.getHexString();
   if (S.mode === 'mouse') {
     if (!S.pointer.seen) return;
@@ -427,16 +504,12 @@ function drawHand(now) {
     return;
   }
   const lm = S.landmarks; if (!lm) return;
-  const P = lm.map((p) => ({ x: (1 - p.x) * W, y: p.y * H }));
+  const toScreen = (h) => h.map((p) => ({ x: (1 - p.x) * W, y: p.y * H }));
+  for (const h of S.hands || []) if (h !== lm) drawHumanHand(toScreen(h), acc, 0.5);
+  const P = toScreen(lm);
+  drawHumanHand(P, acc, 0.92);
   hx.save();
-  hx.shadowColor = acc; hx.shadowBlur = 14 * dpr;
-  hx.strokeStyle = 'rgba(255,255,255,.55)'; hx.lineWidth = 1.6 * dpr; hx.lineCap = 'round';
-  hx.beginPath(); for (const [a, b] of BONES) { hx.moveTo(P[a].x, P[a].y); hx.lineTo(P[b].x, P[b].y); } hx.stroke();
-  for (let i = 0; i < 21; i++) {
-    const tip = i % 4 === 0 && i > 0;
-    hx.fillStyle = tip ? acc : 'rgba(255,255,255,.85)';
-    hx.beginPath(); hx.arc(P[i].x, P[i].y, (tip ? 4.2 : 2.6) * dpr, 0, 7); hx.fill();
-  }
+  hx.lineCap = 'round';
   hx.strokeStyle = acc; hx.lineWidth = (S.pinching ? 2.4 : 1.2) * dpr;
   hx.beginPath(); hx.arc(S.smooth.x * W, S.smooth.y * H, (S.pinching ? 9 : 22) * dpr, 0, 7); hx.stroke();
   drawHud(P[9].x, P[9].y, now, acc, lm);
@@ -445,6 +518,61 @@ function drawHand(now) {
     hx.lineWidth = 3 * dpr;
     hx.beginPath(); hx.arc(P[9].x, P[9].y, 34 * dpr, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2); hx.stroke();
   }
+  hx.restore();
+}
+
+/** A human-shaped hand made of light, built from the 21 landmarks: palm, tapered fingers,
+ *  knuckle creases and fingernails. It takes the chapter's colour rather than any skin tone.
+ *  Shapes are drawn opaque offscreen (so overlaps don't double up), then composited translucent.
+ *  The glow is a wider copy of the same shapes, not canvas shadowBlur (which left ghost hands
+ *  behind in some rasterizers). */
+const handLayer = document.createElement('canvas'), hl = handLayer.getContext('2d');
+const auraLayer = document.createElement('canvas'), al = auraLayer.getContext('2d');
+const FINGERS = [[1, 2, 3, 4, 0.3], [5, 6, 7, 8, 0.24], [9, 10, 11, 12, 0.25], [13, 14, 15, 16, 0.23], [17, 18, 19, 20, 0.19]];
+const mixHex = (hex, to, t) => { const a = parseInt(hex.slice(1), 16), b = parseInt(to.slice(1), 16); const c = [16, 8, 0].map((sh) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t)); return `rgb(${c.join(',')})`; };
+
+function handShapes(ctx, P, size, grow, style) {
+  ctx.fillStyle = style; ctx.strokeStyle = style; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const wx = P[0].x + (P[0].x - P[9].x) * 0.55, wy = P[0].y + (P[0].y - P[9].y) * 0.55;
+  ctx.lineWidth = size * 0.6 * grow; ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y); ctx.lineTo(wx, wy); ctx.stroke();
+  const ring = [0, 1, 2, 5, 9, 13, 17];
+  const cx = ring.reduce((s, i) => s + P[i].x, 0) / ring.length, cy = ring.reduce((s, i) => s + P[i].y, 0) / ring.length;
+  const k = 0.14 + (grow - 1) * 0.4;
+  const pts = ring.map((i) => ({ x: P[i].x + (P[i].x - cx) * k, y: P[i].y + (P[i].y - cy) * k }));
+  ctx.beginPath();
+  pts.forEach((p, i) => { const n = pts[(i + 1) % pts.length], mx = (p.x + n.x) / 2, my = (p.y + n.y) / 2; if (i === 0) ctx.moveTo(mx, my); else ctx.quadraticCurveTo(p.x, p.y, mx, my); });
+  ctx.quadraticCurveTo(pts[0].x, pts[0].y, (pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+  ctx.closePath(); ctx.fill();
+  for (const [a, b, c, d, w] of FINGERS) {
+    [[a, b, 1], [b, c, 0.88], [c, d, 0.78]].forEach(([i, j, t]) => { ctx.lineWidth = size * w * t * grow; ctx.beginPath(); ctx.moveTo(P[i].x, P[i].y); ctx.lineTo(P[j].x, P[j].y); ctx.stroke(); });
+  }
+}
+
+function drawHumanHand(P, acc, alpha) {
+  const W = el.handCanvas.width, H = el.handCanvas.height;
+  handLayer.width = auraLayer.width = W; handLayer.height = auraLayer.height = H; // full reset
+  const size = Math.hypot(P[0].x - P[9].x, P[0].y - P[9].y) || 1;
+  // aura: a wider copy in the accent colour
+  handShapes(al, P, size, 1.45, acc);
+  // body: light gradient in the chapter colour, brighter toward the fingertips
+  const g = hl.createLinearGradient(P[0].x, P[0].y, P[12].x, P[12].y);
+  g.addColorStop(0, mixHex(acc, '#1a1430', 0.45)); g.addColorStop(0.6, acc); g.addColorStop(1, mixHex(acc, '#ffffff', 0.45));
+  handShapes(hl, P, size, 1, g);
+  // knuckle creases and fingernails as lighter detail
+  hl.strokeStyle = 'rgba(255,255,255,.35)'; hl.lineWidth = Math.max(1, size * 0.012);
+  for (const [a, b, c, d, w] of FINGERS) {
+    for (const [j, prev] of [[b, a], [c, b]]) {
+      const dx = P[j].x - P[prev].x, dy = P[j].y - P[prev].y, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, r = size * w * 0.28;
+      hl.beginPath(); hl.moveTo(P[j].x - nx * r, P[j].y - ny * r); hl.lineTo(P[j].x + nx * r, P[j].y + ny * r); hl.stroke();
+    }
+    const dx = P[d].x - P[c].x, dy = P[d].y - P[c].y, len = Math.hypot(dx, dy) || 1, nw = size * w * 0.78;
+    hl.save(); hl.translate(P[d].x - (dx / len) * nw * 0.35, P[d].y - (dy / len) * nw * 0.35); hl.rotate(Math.atan2(dy, dx));
+    hl.fillStyle = 'rgba(255,255,255,.45)'; hl.beginPath(); hl.ellipse(0, 0, nw * 0.42, nw * 0.3, 0, 0, Math.PI * 2); hl.fill();
+    hl.restore();
+  }
+  hx.save();
+  hx.globalAlpha = alpha * 0.22; hx.drawImage(auraLayer, 0, 0);
+  hx.globalAlpha = alpha * 0.78; hx.drawImage(handLayer, 0, 0);
   hx.restore();
 }
 
@@ -498,13 +626,14 @@ function frame(now) {
 }
 
 function placeCard() {
+  // The placard sits in the lower part of the screen, beside the held memory, so the chapter
+  // title above stays clear (it also dims while a memory is open: body.reading).
   const s = world.screenOf(world.grabbed), w = el.card.offsetWidth, h = el.card.offsetHeight;
-  let x = s.x + 60;
-  if (x + w > innerWidth - 16) x = s.x - w - 60;
-  const y = s.y - h / 2;
+  let x = s.x + 70;
+  if (x + w > innerWidth - 16) x = s.x - w - 70;
+  const top = Math.max(innerHeight * 0.44, Math.min(innerHeight - h - 96, s.y - h / 2));
   el.card.style.left = Math.max(16, Math.min(innerWidth - w - 16, x)) + 'px';
-  // Keep the placard below the chapter title so both stay readable.
-  el.card.style.top = Math.max(Math.min(innerHeight * 0.4, innerHeight - h - 90), Math.min(innerHeight - h - 90, y)) + 'px';
+  el.card.style.top = Math.min(top, innerHeight - h - 96) + 'px';
 }
 
 /* -------------------------------------------------------------- BOOT */
@@ -515,5 +644,5 @@ if (DEMO) {
   el.chipCam.classList.add('live');
   toggleSound(); toggleSound(); // sync button label (demo starts muted)
 }
-window.__handGesture = { S, world, STORY }; // for tests and debugging
+window.__handGesture = { S, world, STORY, handleHands, openMap }; // for tests and debugging // for tests and debugging
 requestAnimationFrame(frame);

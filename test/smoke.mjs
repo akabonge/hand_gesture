@@ -54,10 +54,21 @@ try {
   for (let i = 0; i < n; i++) {
     await m.keyboard.press('KeyW');
     await m.waitForTimeout(2600);
+    // Memory orbs must sit below the chapter title, not on top of it.
+    const clash = await m.evaluate(() => {
+      const { world } = window.__handGesture, t = document.querySelector('#title p').getBoundingClientRect();
+      return world.orbs.map((o) => world.screenOf(o)).filter((p) => p.y - 40 < t.bottom && p.x > t.left - 40 && p.x < t.right + 40).length;
+    });
+    if (clash) fail(`mouse: chapter ${i + 1} has ${clash} memory orb(s) over the title`);
     const pos = await m.evaluate(() => { const { world } = window.__handGesture; const o = world.orbs[0]; return world.screenOf(o); });
     await m.mouse.move(pos.x, pos.y); await m.mouse.down(); await m.waitForTimeout(1300);
     s = await state(m);
     if (!s.card) fail(`mouse: chapter ${i + 1} memory card did not open`);
+    const overlap = await m.evaluate(() => {
+      const a = document.getElementById('card').getBoundingClientRect(), b = document.querySelector('#title h1').getBoundingClientRect();
+      return !(a.bottom < b.top || a.top > b.bottom || a.right < b.left || a.left > b.right);
+    });
+    if (overlap) fail(`mouse: chapter ${i + 1} placard overlaps the title`);
     if (shots) await m.screenshot({ path: `test-results/chapter-${i + 1}.png` });
     await m.mouse.up();
     await m.keyboard.press('Space');
@@ -67,6 +78,57 @@ try {
   s = await state(m);
   if (s.ch !== 0) fail(`mouse: did not loop back to chapter 1 (ch=${s.ch})`);
   await m.close();
+
+  // 2b) Two-hand spread opens the chapter map; a map click jumps chapters.
+  const t2 = await page('/');
+  await t2.click('#btn-mouse'); await t2.waitForTimeout(600);
+  const opened = await t2.evaluate(async () => {
+    const { synthHand } = await import('/src/demo.js');
+    const { handleHands, S } = window.__handGesture;
+    let now = performance.now();
+    S.mode = 'camera';
+    handleHands([synthHand(0.45, 0.75), synthHand(0.55, 0.75)], now);
+    handleHands([synthHand(0.15, 0.75), synthHand(0.85, 0.75)], now + 400);
+    const open = S.mapOpen; S.mode = 'mouse';
+    return open;
+  });
+  if (!opened) fail('two hands: spread did not open the chapter map');
+  if (shots) await t2.screenshot({ path: 'test-results/chapter-map.png' });
+  await t2.locator('.map-node').nth(4).click();
+  await t2.waitForTimeout(1200);
+  if ((await state(t2)).ch !== 4) fail('chapter map: clicking chapter 5 did not jump there');
+  await t2.close();
+
+  // 2c) Phone: tap to wake, press-and-hold to grab, next button and swipe.
+  const pctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  const ph2 = await pctx.newPage();
+  ph2.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+  await ph2.goto(BASE + '/');
+  await ph2.tap('#btn-mouse'); await ph2.waitForTimeout(700);
+  await ph2.touchscreen.tap(195, 300); await ph2.waitForTimeout(2600);
+  if (!(await state(ph2)).awake) fail('phone: tap did not wake the world');
+  const orb = await ph2.evaluate(() => { const { world } = window.__handGesture; return world.screenOf(world.orbs[1]); });
+  const cdp = await pctx.newCDPSession(ph2);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', orb.x, orb.y); await ph2.waitForTimeout(1200);
+  if (!(await state(ph2)).card) fail('phone: press-and-hold did not open a memory');
+  const lay = await ph2.evaluate(() => {
+    const r = (q) => document.querySelector(q).getBoundingClientRect();
+    const c = r('#card'), t = r('#title h1'), ctl = r('#controls');
+    const hit = (a, b) => !(a.bottom < b.top || a.top > b.bottom || a.right < b.left || a.left > b.right);
+    return { cardTitle: hit(c, t), cardControls: hit(c, ctl), offscreen: c.right > innerWidth + 1 || c.left < -1, scrollX: document.documentElement.scrollWidth > innerWidth };
+  });
+  if (lay.cardTitle || lay.cardControls || lay.offscreen || lay.scrollX) fail('phone layout: ' + JSON.stringify(lay));
+  if (shots) await ph2.screenshot({ path: 'test-results/phone-card.png' });
+  await touch('touchEnd'); await ph2.waitForTimeout(400);
+  await ph2.tap('#btn-next'); await ph2.waitForTimeout(1300);
+  if ((await state(ph2)).ch !== 1) fail('phone: next button did not advance');
+  await touch('touchStart', 320, 520); await touch('touchMove', 200, 525); await touch('touchMove', 80, 530); await touch('touchEnd');
+  await ph2.waitForTimeout(1300);
+  if ((await state(ph2)).ch !== 2) fail(`phone: swipe did not advance (ch=${(await state(ph2)).ch})`);
+  await ph2.tap('#btn-map'); await ph2.waitForTimeout(700);
+  if (shots) await ph2.screenshot({ path: 'test-results/phone-map.png' });
+  await pctx.close();
 
   // 3) Camera mode with a fake camera: boot sequence must run and end in a usable state.
   const c = await page('/');

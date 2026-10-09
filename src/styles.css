@@ -9,7 +9,7 @@
   --bar: 0px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0 }
-html, body { height: 100%; overflow: hidden; background: #0b0812; color: var(--ink); font-family: var(--serif) }
+html, body { height: 100%; overflow: hidden; touch-action: none; overscroll-behavior: none; background: #0b0812; color: var(--ink); font-family: var(--serif) }
 canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block }
 #hand { pointer-events: none; z-index: 3 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
@@ -45,6 +45,24 @@ body.cinema .bar { height: 11vh }
 .chip.hot { color: var(--ink); border-color: var(--accent) }
 .chip.hot .dot { background: var(--accent); box-shadow: 0 0 10px var(--accent) }
 #controls { right: 18px; bottom: 26px; display: flex; gap: 8px }
+#controls .nav, #btn-map { display: none }
+body.mode-mouse #controls .nav, body.mode-mouse #btn-map, body.mode-camera #btn-map { display: inline-block }
+.mini.nav { font-size: 14px; padding: 6px 12px }
+
+/* Chapter map (two-hand spread) */
+#chapmap { position: fixed; inset: 0; z-index: 9; background: radial-gradient(ellipse at 50% 60%, rgba(20, 14, 34, .82), rgba(4, 3, 10, .94)); opacity: 0; pointer-events: none; transition: opacity .5s }
+#chapmap.show { opacity: 1; pointer-events: auto }
+.map-head { position: absolute; top: 9vh; left: 0; right: 0; text-align: center; padding: 0 16px }
+.map-head .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .32em; text-transform: uppercase; color: var(--accent) }
+.map-head p { margin-top: 10px; font-style: italic; color: var(--ink-dim); font-size: 16px }
+#map-nodes { position: absolute; inset: 0 }
+.map-node { position: absolute; transform: translate(-50%, -50%); background: none; border: 0; color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--serif); padding: 6px }
+.map-node i { width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: 0 0 18px var(--c), 0 0 4px #fff; transition: transform .25s }
+.map-node span { font-family: var(--mono); font-size: 10px; letter-spacing: .2em; color: var(--ink-dim) }
+.map-node b { font-weight: 300; font-size: clamp(13px, 1.4vw, 17px); white-space: nowrap }
+.map-node.hover i, .map-node:hover i, .map-node:focus-visible i { transform: scale(1.9) }
+.map-node.here b { color: var(--accent); font-style: italic }
+#map-close { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%) }
 .mini { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; padding: 8px 12px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: var(--glass); color: var(--ink-dim); backdrop-filter: blur(8px) }
 .mini[aria-pressed="true"] { color: var(--ink); border-color: var(--accent) }
@@ -55,6 +73,7 @@ body.cinema .bar { height: 11vh }
 #title { position: fixed; z-index: 4; left: 0; right: 0; top: 15vh; text-align: center; pointer-events: none; padding: 0 16px;
   opacity: 0; transform: translateY(14px); transition: opacity 1.4s ease, transform 1.4s ease }
 #title.show { opacity: 1; transform: none }
+body.reading #title.show { opacity: .18; transform: translateY(-6px) }
 #title .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .32em; text-transform: uppercase; color: var(--accent) }
 #title h1 { font-weight: 300; font-size: clamp(40px, 7.2vw, 104px); line-height: .98; letter-spacing: -.02em; margin: 14px 0 16px; text-shadow: 0 2px 40px rgba(0, 0, 0, .45) }
 #title h1 em { font-style: italic; color: var(--accent) }
@@ -64,6 +83,7 @@ body.cinema .bar { height: 11vh }
 #caption { position: fixed; z-index: 6; left: 50%; bottom: 92px; transform: translate(-50%, 8px); width: min(760px, calc(100vw - 32px)); text-align: center;
   font-size: clamp(15px, 1.5vw, 19px); line-height: 1.45; color: #fff; text-shadow: 0 1px 2px #000, 0 0 18px rgba(0, 0, 0, .8); opacity: 0; transition: opacity .5s, transform .5s; pointer-events: none }
 #caption.show { opacity: 1; transform: translate(-50%, 0) }
+body.reading #caption.show { opacity: .2 }
 
 /* Museum placard */
 #card { position: fixed; z-index: 6; width: min(340px, 80vw); padding: 18px 20px 20px; border: 1px solid var(--line); border-left: 2px solid var(--accent);
@@ -71,7 +91,7 @@ body.cinema .bar { height: 11vh }
   transition: opacity .45s ease, transform .45s ease; left: 50%; top: 50% }
 #card.show { opacity: 1; transform: none }
 #card img[hidden] { display: none }
-#card img { display: block; width: 100%; height: 150px; object-fit: cover; border-radius: 3px; margin-bottom: 14px; filter: saturate(.9) }
+#card img { display: block; width: 100%; height: 118px; object-position: 50% 25%; object-fit: cover; border-radius: 3px; margin-bottom: 14px; filter: saturate(.9) }
 #card .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .24em; color: var(--accent); text-transform: uppercase }
 #card h3 { font-weight: 600; font-size: 24px; margin: 8px 0 4px; letter-spacing: -.01em }
 #card .meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--ink-dim); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line) }
@@ -141,7 +161,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   #hint { bottom: 76px; font-size: 11px }
   #caption { bottom: 124px }
   #card { width: min(300px, 86vw) }
-  #controls { left: 50%; right: auto; transform: translateX(-50%); bottom: 22px }
+  #controls { left: 50%; right: auto; transform: translateX(-50%); bottom: 22px; flex-wrap: nowrap }
+  #btn-preview { display: none }
+  /* Phone: the constellation becomes a two-column list */
+  #map-nodes { position: absolute; top: 24vh; bottom: 90px; left: 16px; right: 16px; inset: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; align-content: start; overflow-y: auto; top: 22vh; left: 16px; right: 16px; bottom: 90px }
+  .map-node { position: static; transform: none; flex-direction: row; justify-content: flex-start; gap: 10px; left: auto !important; top: auto !important; padding: 10px 8px; border: 1px solid var(--line); border-radius: 6px; background: rgba(255, 255, 255, .03) }
+  .map-node i { width: 10px; height: 10px; flex: none }
+  .map-node b { font-size: 14px; white-space: normal; text-align: left }
 }
 @media (prefers-reduced-motion: reduce) {
   .grain { animation: none }

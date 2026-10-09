@@ -82,3 +82,27 @@ export function createPoseSnap({ touch = 0.3, release = 0.65, minHold = 80, maxF
     return fired;
   };
 }
+
+/** Distance between two hands' palm centres, in units of average hand size. */
+export function handsApart(a, b) {
+  return dist(a[MIDDLE_MCP], b[MIDDLE_MCP]) / ((handSize(a) + handSize(b)) / 2);
+}
+
+/**
+ * Two-hand "spread": hands come together, then move apart quickly -> 'open'.
+ * Apart, then brought together quickly -> 'close'.
+ */
+export function createSpreadDetector({ together = 2.2, apart = 4.5, window = 1100, cooldown = 1200 } = {}) {
+  let togetherAt = -Infinity, apartAt = -Infinity, last = -Infinity;
+  return (ratio, now) => {
+    let event = null;
+    if (ratio < together) {
+      if (now - apartAt < window && now - last > cooldown) { event = 'close'; last = now; }
+      togetherAt = now; apartAt = -Infinity;
+    } else if (ratio > apart) {
+      if (now - togetherAt < window && now - last > cooldown) { event = 'open'; last = now; }
+      apartAt = now; togetherAt = -Infinity;
+    }
+    return event;
+  };
+}
