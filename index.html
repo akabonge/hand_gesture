@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alo: Chapters</title>
+<meta name="description" content="An interactive story you move through with your hands. Open your palm, pinch a memory, snap to turn the chapter. By Aloysious Kabonge.">
+<meta property="og:title" content="Alo: Chapters">
+<meta property="og:description" content="A story you move through with your hands: from Kampala's seven hills to Fredericksburg, Virginia.">
+<meta property="og:image" content="/assets/og.jpg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0b0812">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./src/styles.css">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three.module.js",
+  "@mediapipe/tasks-vision": "./vendor/tasks-vision/vision_bundle.mjs"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+<canvas id="hand" aria-hidden="true"></canvas>
+<video id="cam" playsinline muted aria-hidden="true"></video>
+<div class="grain" aria-hidden="true"></div>
+<div class="bar top" aria-hidden="true"></div>
+<div class="bar bottom" aria-hidden="true"></div>
+
+<header id="hud-left" class="hud">
+  <div>Alo · <b id="chap-num">Chapter 01 / 06</b></div>
+  <div id="chap-name">Roots</div>
+  <div id="progress" aria-hidden="true"></div>
+  <div id="mem-count">Memories 0 / 3</div>
+</header>
+<div id="hud-right" class="hud" aria-label="Sensors">
+  <div class="chip" id="chip-cam"><span class="dot"></span>Camera</div>
+  <div class="chip" id="chip-mic"><span class="dot"></span>Mic</div>
+  <div class="chip" id="chip-oli"><span class="dot"></span><span class="label">OLI</span></div>
+  <div class="chip" id="chip-gesture"><span class="dot"></span><span id="gesture-txt">No hand</span></div>
+</div>
+
+<section id="title" aria-live="polite"><div class="kicker" id="t-kicker"></div><h1 id="t-h1"></h1><p id="t-line"></p></section>
+<p id="caption" aria-live="polite"></p>
+
+<article id="card" aria-live="polite">
+  <img id="c-img" alt="" hidden>
+  <div class="k" id="c-k"></div>
+  <h3 id="c-h"></h3>
+  <div class="meta" id="c-meta"></div>
+  <p id="c-p"></p>
+</article>
+
+<div id="hint">Open your palm to <span>wake the world</span></div>
+<div id="controls" class="hud">
+  <button id="btn-sound" class="mini" aria-pressed="true">Sound on</button>
+  <button id="btn-preview" class="mini" aria-pressed="true">Camera view</button>
+</div>
+<a id="credit" class="hud" href="https://aialo.io" target="_blank" rel="noopener">Built by Alo · aialo.io</a>
+<div id="flash" aria-hidden="true"></div>
+
+<div id="titlecard" aria-hidden="true"><div id="tc-num"></div><div id="tc-name"></div></div>
+
+<div id="boot" aria-live="polite">
+  <div class="boot-inner">
+    <div class="boot-ring" aria-hidden="true"></div>
+    <div id="boot-log"></div>
+  </div>
+</div>
+
+<div id="intro">
+  <div class="intro-inner">
+    <div class="kicker">An interactive story · Kampala to Fredericksburg</div>
+    <h1>Alo: <em>Chapters</em></h1>
+    <p class="lede">A story you move through with your hands.</p>
+    <div class="legend">
+      <div><b>Open palm</b><span>Hold it up to wake the world</span></div>
+      <div><b>Pinch</b><span>Grab a glowing memory and pull it close</span></div>
+      <div><b>Snap</b><span>Snap your fingers to turn the chapter</span></div>
+      <div><b>Say</b><span>&ldquo;Next&rdquo;, &ldquo;back&rdquo; or &ldquo;Oli otya&rdquo;</span></div>
+    </div>
+    <div class="btns">
+      <button id="btn-cam">Start with camera</button>
+      <button id="btn-mouse" class="ghost">Use mouse instead</button>
+      <a class="ghost btnlike" href="?demo">Watch a demo</a>
+    </div>
+    <small>Best on a laptop in good light, sound on. Video and audio stay in your browser: nothing is recorded or uploaded.</small>
+    <small>Mouse: <b>W</b> wake · click &amp; hold to grab · <b>Space</b> next · <b>&larr;</b> back · <b>M</b> mute</small>
+    <small id="err" role="alert"></small>
+  </div>
+</div>
+<div id="sr-status" class="sr-only" aria-live="polite"></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
