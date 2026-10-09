@@ -32,18 +32,18 @@ async function page(url, vp = { width: 1280, height: 720 }) {
 const state = (p) => p.evaluate(() => ({ ch: window.__handGesture.S.ch, awake: window.__handGesture.S.awake, collected: window.__handGesture.S.collected, card: document.getElementById('card').classList.contains('show') }));
 
 try {
-  // 1) Demo
+  let s;
+  // 1) Demo (the ghost hand runs on the frame clock, so poll instead of fixed sleeps)
   const d = await page('/?demo');
-  await d.waitForTimeout(3200);
-  let s = await state(d);
-  if (!s.awake) fail('demo: open palm did not wake chapter 1');
-  await d.waitForTimeout(2600);
-  s = await state(d);
-  if (!s.card || s.collected < 1) fail(`demo: no memory grabbed (${JSON.stringify(s)})`);
+  const until = async (fn, ms, label) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { const v = await state(d); if (fn(v)) return v; await d.waitForTimeout(250); }
+    fail(`demo: ${label} (${JSON.stringify(await state(d))})`);
+  };
+  await until((v) => v.awake, 20000, 'open palm did not wake chapter 1');
+  await until((v) => v.card && v.collected >= 1, 30000, 'no memory grabbed');
   if (shots) await d.screenshot({ path: 'test-results/demo-grab.png' });
-  await d.waitForTimeout(7600);
-  s = await state(d);
-  if (s.ch !== 1) fail(`demo: snap did not advance to chapter 2 (ch=${s.ch})`);
+  await until((v) => v.ch === 1, 60000, 'snap did not advance to chapter 2');
   await d.close();
 
   // 2) Mouse walk-through of every chapter

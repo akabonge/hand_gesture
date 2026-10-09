@@ -400,9 +400,9 @@ function say(text) {
 
 /* -------------------------------------------------------------- DEMO */
 const demoFired = new Set();
-let demoT0 = 0;
-function runDemo(now) {
-  const t = (now - demoT0) / 1000;
+function runDemo(now, clock) {
+  // Uses the frame clock (paused while the tab is hidden) so the script never skips steps.
+  const t = clock;
   const loop = Math.floor(t / 22);
   const { landmarks, snapKey } = demoFrame(t, (i) => {
     const o = world.orbs[i]; if (!o) return null;
@@ -485,7 +485,7 @@ resize();
 let last = performance.now(), t = 0;
 function frame(now) {
   const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); last = now; t += dt;
-  if (DEMO) runDemo(now); else pollCamera(now);
+  if (DEMO) runDemo(now, t); else pollCamera(now);
   listenForSnap(now);
   const k = 1 - Math.exp(-dt * 18);
   S.smooth.x += (S.pointer.x - S.smooth.x) * k; S.smooth.y += (S.pointer.y - S.smooth.y) * k;
@@ -513,7 +513,6 @@ if (DEMO) {
   S.mode = 'demo';
   el.intro.classList.add('gone');
   el.chipCam.classList.add('live');
-  demoT0 = performance.now();
   toggleSound(); toggleSound(); // sync button label (demo starts muted)
 }
 window.__handGesture = { S, world, STORY }; // for tests and debugging
