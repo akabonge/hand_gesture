@@ -17,7 +17,6 @@ It's the story of [Aloysious Kabonge](https://aialo.io), told in eleven chapters
 | Open palm, held ½ s | The world wakes: sunrise, title, narration in Alo's own voice |
 | Pinch near a light | Pull a memory close and read its museum placard |
 | Snap your fingers | Next chapter (with title card, letterbox and a new world) |
-| Both hands: together, then spread apart | Open the chapter map; pinch a chapter to jump there |
 | Move your hand | The camera follows |
 | Say "next", "back", "map", "Oli otya", "where am I", "mute" | OLI, the voice assistant, responds (Chrome/Edge) |
 | Phone / touch | Tap to wake, press and hold a light, swipe to turn, Chapters button |

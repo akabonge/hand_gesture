@@ -17,72 +17,93 @@ const pointsMat = (color, size, extra = {}) => new THREE.PointsMaterial({ color,
 const lineMat = (color, opacity = 0.8) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, blending: add, depthWrite: false });
 
 
-/* ---- Ugandan wildlife silhouettes (giraffe, elephant, Uganda kob) walking the horizon ---- */
-function silhouettePart(shape, color, outline) {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(new THREE.ShapeGeometry(shape, 12), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false, fog: false })));
-  const pts = shape.getPoints(24); pts.push(pts[0].clone());
-  g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: outline, transparent: true, opacity: 0.55, blending: add, depthWrite: false, fog: false })));
-  return g;
+/* ---- Ugandan wildlife, Minecraft-style: blocky 3D animals built from lit boxes ---- */
+const voxMats = new Map();
+const voxMat = (color) => { if (!voxMats.has(color)) voxMats.set(color, new THREE.MeshLambertMaterial({ color, flatShading: true, fog: false })); return voxMats.get(color); };
+const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+function box(parent, color, [w, h, d], [x, y, z], rotZ = 0) {
+  const m = new THREE.Mesh(boxGeo, voxMat(color));
+  m.scale.set(w, h, d); m.position.set(x, y, z); m.rotation.z = rotZ;
+  parent.add(m); return m;
 }
-const ellipse = (x, y, rx, ry, rot = 0) => { const sh = new THREE.Shape(); sh.absellipse(x, y, rx, ry, 0, Math.PI * 2, false, rot); return sh; };
-const quad = (pts) => { const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); pts.slice(1).forEach(([x, y]) => sh.lineTo(x, y)); sh.closePath(); return sh; };
-function leg(x, y, len, w, color, outline) {
-  const pivot = new THREE.Group(); pivot.position.set(x, y, 0);
-  pivot.add(silhouettePart(quad([[-w / 2, 0], [w / 2, 0], [w * 0.4, -len], [-w * 0.4, -len]]), color, outline));
-  return pivot;
+/** A leg that swings from the hip: pivot at (x, hipY, z), box hangs down by len. */
+function voxLeg(parent, color, x, hipY, z, len, w, legs, hoof) {
+  const pivot = new THREE.Group(); pivot.position.set(x, hipY, z);
+  box(pivot, color, [w, len, w], [0, -len / 2, 0]);
+  if (hoof) box(pivot, hoof, [w * 1.05, w * 0.6, w * 1.05], [0, -len + w * 0.3, 0]);
+  parent.add(pivot); legs.push(pivot);
 }
-function animal(kind, color, outline) {
+
+function voxAnimal(kind) {
   const g = new THREE.Group(), legs = [];
-  const add = (shape) => g.add(silhouettePart(shape, color, outline));
-  if (kind === 'giraffe') {
-    add(ellipse(0, 2.4, 1.2, 0.6, -0.1));
-    add(quad([[0.6, 2.6], [1.0, 2.8], [2.0, 5.4], [1.7, 5.6]]));
-    add(ellipse(1.95, 5.6, 0.45, 0.2, -0.3));
-    for (const x of [-0.8, -0.5, 0.6, 0.9]) legs.push(leg(x, 2.1, 2.1, 0.18, color, outline));
-  } else if (kind === 'elephant') {
-    add(ellipse(0, 2.0, 1.7, 1.15));
-    add(ellipse(1.7, 2.4, 0.75, 0.7));
-    add(quad([[2.2, 2.3], [2.5, 2.2], [2.6, 0.6], [2.4, 0.5]]));               // trunk
-    add(quad([[1.1, 2.9], [1.6, 3.1], [1.5, 1.7], [1.1, 1.9]]));               // ear
-    for (const x of [-1.1, -0.6, 0.6, 1.1]) legs.push(leg(x, 1.2, 1.2, 0.5, color, outline));
-  } else { // Uganda kob: slender antelope with lyre-shaped horns (on Uganda's coat of arms)
-    add(ellipse(0, 1.5, 0.9, 0.38, -0.05));
-    add(quad([[0.6, 1.6], [0.85, 1.7], [1.25, 2.4], [1.05, 2.5]]));
-    add(ellipse(1.25, 2.5, 0.32, 0.16, -0.4));
-    add(quad([[1.15, 2.6], [1.2, 2.6], [1.05, 3.3], [1.0, 3.25]]));
-    add(quad([[1.25, 2.6], [1.3, 2.6], [1.3, 3.35], [1.25, 3.3]]));
-    for (const x of [-0.6, -0.4, 0.45, 0.6]) legs.push(leg(x, 1.25, 1.25, 0.1, color, outline));
+  if (kind === 'elephant') {
+    const c = 0x8c8c94, dk = 0x6e6e78;
+    box(g, c, [3.4, 2.3, 2.1], [0, 3.1, 0]);
+    box(g, c, [1.5, 1.5, 1.6], [2.2, 3.6, 0]);
+    box(g, dk, [0.25, 1.7, 1.2], [1.6, 3.6, 1.05]); box(g, dk, [0.25, 1.7, 1.2], [1.6, 3.6, -1.05]); // ears
+    box(g, c, [0.5, 1.2, 0.5], [3.05, 2.7, 0]); box(g, c, [0.45, 1.0, 0.45], [3.15, 1.7, 0]);      // trunk
+    box(g, 0xf4efe4, [0.7, 0.18, 0.18], [3.0, 2.9, 0.45]); box(g, 0xf4efe4, [0.7, 0.18, 0.18], [3.0, 2.9, -0.45]); // tusks
+    box(g, dk, [0.15, 0.9, 0.15], [-1.75, 2.9, 0], 0.3);                                           // tail
+    for (const [x, z] of [[-1.1, 0.6], [-1.1, -0.6], [1.1, 0.6], [1.1, -0.6]]) voxLeg(g, c, x, 2.0, z, 2.0, 0.75, legs, dk);
+  } else if (kind === 'giraffe') {
+    const c = 0xe0ad4f, spot = 0x8a4b1e;
+    box(g, c, [2.3, 1.2, 1.0], [0, 3.6, 0]);
+    box(g, c, [0.55, 3.2, 0.55], [1.15, 5.4, 0], -0.32);                                           // neck
+    box(g, c, [1.0, 0.55, 0.55], [1.85, 7.0, 0]);                                                   // head
+    box(g, spot, [0.12, 0.35, 0.12], [1.6, 7.45, 0.15]); box(g, spot, [0.12, 0.35, 0.12], [1.6, 7.45, -0.15]); // ossicones
+    for (const [x, y] of [[-0.7, 3.8], [0.1, 3.4], [0.7, 3.9], [-0.2, 4.0]]) { box(g, spot, [0.4, 0.35, 0.05], [x, y, 0.52]); box(g, spot, [0.4, 0.35, 0.05], [x, y, -0.52]); }
+    for (const y of [4.6, 5.4, 6.1]) { box(g, spot, [0.25, 0.3, 0.05], [1.15 + (y - 5.4) * 0.33, y, 0.29]); }
+    box(g, spot, [0.12, 0.8, 0.12], [-1.2, 3.3, 0], 0.4);
+    for (const [x, z] of [[-0.8, 0.32], [-0.8, -0.32], [0.8, 0.32], [0.8, -0.32]]) voxLeg(g, c, x, 3.05, z, 3.0, 0.3, legs, spot);
+  } else if (kind === 'lion') {
+    const c = 0xd6a457, mane = 0x7a4718;
+    box(g, c, [2.2, 1.0, 1.0], [0, 1.9, 0]);
+    box(g, mane, [1.0, 1.4, 1.4], [1.15, 2.3, 0]);
+    box(g, c, [0.8, 0.8, 0.8], [1.6, 2.3, 0]);
+    box(g, 0x3a2410, [0.25, 0.2, 0.3], [2.05, 2.15, 0]);                                          // nose
+    box(g, c, [0.12, 0.9, 0.12], [-1.3, 2.0, 0], 0.7); box(g, mane, [0.25, 0.25, 0.25], [-1.6, 1.6, 0]); // tail
+    for (const [x, z] of [[-0.8, 0.32], [-0.8, -0.32], [0.75, 0.32], [0.75, -0.32]]) voxLeg(g, c, x, 1.45, z, 1.4, 0.32, legs);
+  } else { // Uganda kob: the antelope on Uganda's coat of arms
+    const c = 0xb8642a, belly = 0xf2e6d2, horn = 0x2a1a10;
+    box(g, c, [1.7, 0.8, 0.65], [0, 2.1, 0]);
+    box(g, belly, [1.4, 0.2, 0.62], [0, 1.72, 0]);
+    box(g, c, [0.32, 1.0, 0.32], [0.85, 2.7, 0], -0.4);
+    box(g, c, [0.65, 0.38, 0.38], [1.25, 3.2, 0]);
+    box(g, horn, [0.08, 0.8, 0.08], [1.05, 3.75, 0.12], 0.25); box(g, horn, [0.08, 0.8, 0.08], [1.05, 3.75, -0.12], 0.25);
+    for (const [x, z] of [[-0.6, 0.22], [-0.6, -0.22], [0.6, 0.22], [0.6, -0.22]]) voxLeg(g, c, x, 1.75, z, 1.75, 0.16, legs, horn);
   }
-  legs.forEach((l) => g.add(l));
   g.userData.legs = legs;
   return g;
 }
 
-function wildlife(accent) {
+function wildlife() {
   const group = new THREE.Group(), herd = [];
-  const kinds = [['elephant', 1.0], ['giraffe', 1.0], ['kob', 1.0], ['kob', 0.9], ['giraffe', 0.85], ['elephant', 0.8]];
-  kinds.forEach(([k, sc], i) => {
-    const a = animal(k, 0x140805, accent);
-    a.scale.setScalar(sc * 1.3);
-    a.position.set(-70 + i * 22 + Math.random() * 6, -4.2, -58 - (i % 3) * 5);
-    a.userData.speed = k === 'elephant' ? 1.2 : k === 'giraffe' ? 1.6 : 2.2;
-    a.userData.phase = Math.random() * 6;
+  group.add(new THREE.HemisphereLight(0xfff0dc, 0x5a3820, 2.2));
+  const sun = new THREE.DirectionalLight(0xffd2a8, 2.4); sun.position.set(-30, 40, 60); group.add(sun);
+  const kinds = [['elephant', 1.15, 1.0], ['giraffe', 1.0, 1.5], ['kob', 1.0, 2.4], ['lion', 1.0, 1.9], ['kob', 0.9, 2.3], ['elephant', 0.9, 1.1], ['giraffe', 0.85, 1.4]];
+  kinds.forEach(([k, sc, speed], i) => {
+    const a = voxAnimal(k);
+    a.scale.setScalar(sc * 1.9);
+    a.position.set(-75 + i * 24 + Math.random() * 5, -6.6, -22 - (i % 3) * 6);
+    a.userData.speed = speed; a.userData.phase = Math.random() * 6;
     group.add(a); herd.push(a);
   });
   return {
     group,
     update(dt, t, wake) {
       for (const a of herd) {
-        a.position.x += dt * a.userData.speed * (0.4 + wake * 0.6);
-        if (a.position.x > 80) a.position.x = -80;
-        a.userData.legs.forEach((l, k) => { l.rotation.z = Math.sin(t * a.userData.speed * 2.2 + a.userData.phase + (k % 2) * Math.PI) * 0.25; });
+        const v = a.userData.speed * (0.45 + wake * 0.55);
+        a.position.x += dt * v;
+        if (a.position.x > 85) a.position.x = -85;
+        const step = t * v * 1.6 + a.userData.phase;
+        a.userData.legs.forEach((l, k) => { l.rotation.z = Math.sin(step + (k === 0 || k === 3 ? 0 : Math.PI)) * 0.35; });
+        a.position.y = -6.6 + Math.abs(Math.sin(step)) * 0.1;
       }
     },
   };
 }
 
-/** Kampala: grey crowned cranes gliding over the hills, with elephants, giraffes and kob walking the horizon. */
+/** Kampala: grey crowned cranes over the hills, with blocky elephants, giraffes, kob and a lion walking below. */
 function cranes(accent) {
   const group = new THREE.Group(), birds = [];
   for (let i = 0; i < 16; i++) {
@@ -95,7 +116,7 @@ function cranes(accent) {
     group.add(bird); birds.push(bird);
   }
   group.position.set(-70, 16, -55);
-  const flock = group, scene = new THREE.Group(), herd = wildlife(accent);
+  const flock = group, scene = new THREE.Group(), herd = wildlife();
   scene.add(flock, herd.group);
   return {
     group: scene,

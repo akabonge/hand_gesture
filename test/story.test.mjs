@@ -23,7 +23,8 @@ test('every referenced photo and voice clip exists', () => {
   for (const c of STORY) {
     if (c.voice) { assert.ok(existsSync(pub(c.voice)), c.voice); assert.ok(c.caption, `${c.name}: voice without caption`); }
     for (const m of c.memories) {
-      if (m.img) assert.ok(existsSync(pub(m.img)), m.img);
+      if (m.img && !/^https?:/.test(m.img)) assert.ok(existsSync(pub(m.img)), m.img);
+      for (const [label, href] of m.links || []) assert.ok(label && /^https:\/\//.test(href), `${m.t}: bad link ${href}`);
       if (m.voice) assert.ok(existsSync(pub(m.voice)), m.voice);
     }
   }

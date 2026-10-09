@@ -2,9 +2,10 @@ import { STORY } from './story.js';
 import { World } from './world.js';
 import { demoFrame } from './demo.js';
 import { createMusic } from './music.js';
+import { memoryImage } from './art.js';
 import {
   pinchRatio, snapRatio, isOpenPalm, pointerFrom, createPinchTracker,
-  highBandEnergy, createSnapDetector, createPoseSnap, handsApart, createSpreadDetector,
+  highBandEnergy, createSnapDetector, createPoseSnap,
 } from './gestures.js';
 
 const VISION_VERSION = '0.10.14';
@@ -43,7 +44,6 @@ const world = new World($('scene'));
 const pinchTracker = createPinchTracker();
 const snapDetector = createSnapDetector();
 const poseSnap = createPoseSnap();
-const spread = createSpreadDetector();
 
 /* ------------------------------------------------------------ CHAPTERS */
 function setChapter(ch, instant = false) {
@@ -57,7 +57,7 @@ function setChapter(ch, instant = false) {
   [...el.progress.children].forEach((n, i) => n.classList.toggle('on', i <= ch));
   el.kicker.textContent = c.kicker; el.h1.innerHTML = c.title; el.line.textContent = c.line;
   el.title.classList.remove('show'); el.card.classList.remove('show'); el.caption.classList.remove('show');
-  document.body.classList.remove('reading');
+  document.body.classList.remove('reading'); $('c-links').textContent = '';
   stopVoice();
   pad.setChapter(ch);
   if (!instant) showTitleCard(ch);
@@ -106,6 +106,7 @@ function hint(html) { el.hint.innerHTML = html; }
 function announce(text) { el.status.textContent = text; }
 
 /* -------------------------------------------------------------- GRAB */
+let cardTimer = 0;
 function tryGrab() {
   if (!S.awake || world.grabbed) return;
   const best = world.pick(S.pointer.x * innerWidth, S.pointer.y * innerHeight, Math.max(120, innerWidth * 0.1));
@@ -116,7 +117,13 @@ function tryGrab() {
   el.cardK.textContent = `Exhibit ${S.ch + 1}.${u.i + 1} · ${STORY[S.ch].name}`;
   el.cardMeta.textContent = m.meta || '';
   el.cardH.textContent = m.t; el.cardP.textContent = m.p;
-  if (m.img) { el.cardImg.src = m.img; el.cardImg.alt = m.t; el.cardImg.hidden = false; } else { el.cardImg.hidden = true; el.cardImg.removeAttribute('src'); }
+  clearTimeout(cardTimer);
+  const nav = $('c-links'); nav.textContent = '';
+  for (const [label, href] of m.links || []) {
+    const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = label; nav.appendChild(a);
+  }
+  const pic = memoryImage(m, '#' + world.target.accent.getHexString());
+  if (pic) { el.cardImg.src = pic; el.cardImg.alt = m.t; el.cardImg.hidden = false; } else { el.cardImg.hidden = true; el.cardImg.removeAttribute('src'); }
   el.card.classList.add('show');
   document.body.classList.add('reading');
   announce(`${m.t}. ${m.p}`);
@@ -127,14 +134,16 @@ function tryGrab() {
 function releaseGrab() {
   if (!world.grabbed) return;
   world.release();
-  setTimeout(() => { if (!world.grabbed) { el.card.classList.remove('show'); document.body.classList.remove('reading'); } }, 1600);
+  // The placard stays a few seconds after letting go, so its links can be clicked.
+  clearTimeout(cardTimer);
+  cardTimer = setTimeout(() => { if (!world.grabbed) { el.card.classList.remove('show'); document.body.classList.remove('reading'); } }, 7000);
   if (S.collected >= STORY[S.ch].memories.length) {
     hint(S.mode === 'mouse' ? 'Press <b>Space</b> to turn the chapter' : '<span>Snap your fingers</span> to turn the chapter');
   }
 }
 
 /* ------------------------------------------------------- CHAPTER MAP */
-// Opened by spreading both hands apart (or the Chapters button / C key / saying "map").
+// Opened with the Chapters button, the C key or by saying "map". Pinch a chapter to jump there.
 STORY.forEach((c, i) => {
   const b = document.createElement('button');
   b.className = 'map-node';
@@ -152,7 +161,7 @@ function openMap() {
   if (S.mapOpen) return;
   S.mapOpen = true; el.chapmap.classList.add('show');
   [...el.mapNodes.children].forEach((n, i) => n.classList.toggle('here', i === S.ch));
-  sfx('wake'); announce('Chapter map open. Point and pinch a chapter, or bring your hands together to close.');
+  sfx('wake'); announce('Chapter map open. Point and pinch a chapter, or say close.');
 }
 function closeMap() {
   if (!S.mapOpen) return;
@@ -171,21 +180,9 @@ function mapHover() {
   return best;
 }
 
-/** Camera frames can contain 0-2 hands. One hand drives everything; two hands add the spread gesture. */
+/** One hand drives everything (MediaPipe is set to track a single hand). */
 function handleHands(hands, now) {
-  S.hands = hands;
-  if (hands.length >= 2) {
-    const ev = spread(handsApart(hands[0], hands[1]), now);
-    if (ev === 'open') openMap();
-    if (ev === 'close') closeMap();
-  }
-  // Primary hand: the one closest to where the pointer already is (keeps grabs steady).
-  let primary = hands[0] || null;
-  if (hands.length > 1 && S.pointer.seen) {
-    const d = (h) => { const p = pointerFrom(h); return Math.hypot(p.x - S.pointer.x, p.y - S.pointer.y); };
-    primary = d(hands[0]) <= d(hands[1]) ? hands[0] : hands[1];
-  }
-  handleLandmarks(primary, now);
+  handleLandmarks(hands[0] || null, now);
 }
 
 /* ----------------------------------------------------------- GESTURES */
@@ -290,7 +287,7 @@ async function createLandmarker() {
   try { const r = await fetch(MODEL_LOCAL, { method: 'HEAD' }); if (r.ok) model = MODEL_LOCAL; } catch { /* use remote */ }
   const opts = (delegate) => ({
     baseOptions: { modelAssetPath: model, delegate },
-    runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
+    runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: 0.6, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5,
   });
   try { return await vision.HandLandmarker.createFromOptions(files, opts('GPU')); }
   catch { return await vision.HandLandmarker.createFromOptions(files, opts('CPU')); }
@@ -322,7 +319,7 @@ function startMouse(keepIntro = false) {
 addEventListener('pointermove', (e) => { if (S.mode !== 'mouse') return; S.pointer.x = e.clientX / innerWidth; S.pointer.y = e.clientY / innerHeight; S.pointer.seen = true; });
 let downAt = null;
 addEventListener('pointerdown', (e) => {
-  if (S.mode !== 'mouse' || e.target.closest('button, a, #chapmap')) return;
+  if (S.mode !== 'mouse' || e.target.closest('button, a, #chapmap, #c-links')) return;
   S.pointer.x = e.clientX / innerWidth; S.pointer.y = e.clientY / innerHeight; S.pointer.seen = true;
   downAt = { x: e.clientX, y: e.clientY, t: performance.now() };
   if (!S.awake) { wakeUp(); return; }
@@ -504,10 +501,18 @@ function drawHand(now) {
     return;
   }
   const lm = S.landmarks; if (!lm) return;
-  const toScreen = (h) => h.map((p) => ({ x: (1 - p.x) * W, y: p.y * H }));
-  for (const h of S.hands || []) if (h !== lm) drawHumanHand(toScreen(h), acc, 0.5);
-  const P = toScreen(lm);
-  drawHumanHand(P, acc, 0.92);
+  const P = lm.map((p) => ({ x: (1 - p.x) * W, y: p.y * H }));
+  // Glowing skeleton hand (the original design): bones, joints, accent fingertips.
+  hx.save();
+  hx.shadowColor = acc; hx.shadowBlur = 14 * dpr;
+  hx.strokeStyle = 'rgba(255,255,255,.6)'; hx.lineWidth = 1.8 * dpr; hx.lineCap = 'round';
+  hx.beginPath(); for (const [a, b] of BONES) { hx.moveTo(P[a].x, P[a].y); hx.lineTo(P[b].x, P[b].y); } hx.stroke();
+  for (let i = 0; i < 21; i++) {
+    const tip = i % 4 === 0 && i > 0;
+    hx.fillStyle = tip ? acc : 'rgba(255,255,255,.9)';
+    hx.beginPath(); hx.arc(P[i].x, P[i].y, (tip ? 4.4 : 2.8) * dpr, 0, 7); hx.fill();
+  }
+  hx.restore();
   hx.save();
   hx.lineCap = 'round';
   hx.strokeStyle = acc; hx.lineWidth = (S.pinching ? 2.4 : 1.2) * dpr;
@@ -521,60 +526,7 @@ function drawHand(now) {
   hx.restore();
 }
 
-/** A human-shaped hand made of light, built from the 21 landmarks: palm, tapered fingers,
- *  knuckle creases and fingernails. It takes the chapter's colour rather than any skin tone.
- *  Shapes are drawn opaque offscreen (so overlaps don't double up), then composited translucent.
- *  The glow is a wider copy of the same shapes, not canvas shadowBlur (which left ghost hands
- *  behind in some rasterizers). */
-const handLayer = document.createElement('canvas'), hl = handLayer.getContext('2d');
-const auraLayer = document.createElement('canvas'), al = auraLayer.getContext('2d');
-const FINGERS = [[1, 2, 3, 4, 0.3], [5, 6, 7, 8, 0.24], [9, 10, 11, 12, 0.25], [13, 14, 15, 16, 0.23], [17, 18, 19, 20, 0.19]];
-const mixHex = (hex, to, t) => { const a = parseInt(hex.slice(1), 16), b = parseInt(to.slice(1), 16); const c = [16, 8, 0].map((sh) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t)); return `rgb(${c.join(',')})`; };
-
-function handShapes(ctx, P, size, grow, style) {
-  ctx.fillStyle = style; ctx.strokeStyle = style; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  const wx = P[0].x + (P[0].x - P[9].x) * 0.55, wy = P[0].y + (P[0].y - P[9].y) * 0.55;
-  ctx.lineWidth = size * 0.6 * grow; ctx.beginPath(); ctx.moveTo(P[0].x, P[0].y); ctx.lineTo(wx, wy); ctx.stroke();
-  const ring = [0, 1, 2, 5, 9, 13, 17];
-  const cx = ring.reduce((s, i) => s + P[i].x, 0) / ring.length, cy = ring.reduce((s, i) => s + P[i].y, 0) / ring.length;
-  const k = 0.14 + (grow - 1) * 0.4;
-  const pts = ring.map((i) => ({ x: P[i].x + (P[i].x - cx) * k, y: P[i].y + (P[i].y - cy) * k }));
-  ctx.beginPath();
-  pts.forEach((p, i) => { const n = pts[(i + 1) % pts.length], mx = (p.x + n.x) / 2, my = (p.y + n.y) / 2; if (i === 0) ctx.moveTo(mx, my); else ctx.quadraticCurveTo(p.x, p.y, mx, my); });
-  ctx.quadraticCurveTo(pts[0].x, pts[0].y, (pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
-  ctx.closePath(); ctx.fill();
-  for (const [a, b, c, d, w] of FINGERS) {
-    [[a, b, 1], [b, c, 0.88], [c, d, 0.78]].forEach(([i, j, t]) => { ctx.lineWidth = size * w * t * grow; ctx.beginPath(); ctx.moveTo(P[i].x, P[i].y); ctx.lineTo(P[j].x, P[j].y); ctx.stroke(); });
-  }
-}
-
-function drawHumanHand(P, acc, alpha) {
-  const W = el.handCanvas.width, H = el.handCanvas.height;
-  handLayer.width = auraLayer.width = W; handLayer.height = auraLayer.height = H; // full reset
-  const size = Math.hypot(P[0].x - P[9].x, P[0].y - P[9].y) || 1;
-  // aura: a wider copy in the accent colour
-  handShapes(al, P, size, 1.45, acc);
-  // body: light gradient in the chapter colour, brighter toward the fingertips
-  const g = hl.createLinearGradient(P[0].x, P[0].y, P[12].x, P[12].y);
-  g.addColorStop(0, mixHex(acc, '#1a1430', 0.45)); g.addColorStop(0.6, acc); g.addColorStop(1, mixHex(acc, '#ffffff', 0.45));
-  handShapes(hl, P, size, 1, g);
-  // knuckle creases and fingernails as lighter detail
-  hl.strokeStyle = 'rgba(255,255,255,.35)'; hl.lineWidth = Math.max(1, size * 0.012);
-  for (const [a, b, c, d, w] of FINGERS) {
-    for (const [j, prev] of [[b, a], [c, b]]) {
-      const dx = P[j].x - P[prev].x, dy = P[j].y - P[prev].y, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len, r = size * w * 0.28;
-      hl.beginPath(); hl.moveTo(P[j].x - nx * r, P[j].y - ny * r); hl.lineTo(P[j].x + nx * r, P[j].y + ny * r); hl.stroke();
-    }
-    const dx = P[d].x - P[c].x, dy = P[d].y - P[c].y, len = Math.hypot(dx, dy) || 1, nw = size * w * 0.78;
-    hl.save(); hl.translate(P[d].x - (dx / len) * nw * 0.35, P[d].y - (dy / len) * nw * 0.35); hl.rotate(Math.atan2(dy, dx));
-    hl.fillStyle = 'rgba(255,255,255,.45)'; hl.beginPath(); hl.ellipse(0, 0, nw * 0.42, nw * 0.3, 0, 0, Math.PI * 2); hl.fill();
-    hl.restore();
-  }
-  hx.save();
-  hx.globalAlpha = alpha * 0.22; hx.drawImage(auraLayer, 0, 0);
-  hx.globalAlpha = alpha * 0.78; hx.drawImage(handLayer, 0, 0);
-  hx.restore();
-}
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
 
 /** Holographic HUD around the palm: rotating arcs, ticks and a live readout. */
 function drawHud(cx, cy, now, acc, lm) {
@@ -626,14 +578,17 @@ function frame(now) {
 }
 
 function placeCard() {
-  // The placard sits in the lower part of the screen, beside the held memory, so the chapter
-  // title above stays clear (it also dims while a memory is open: body.reading).
-  const s = world.screenOf(world.grabbed), w = el.card.offsetWidth, h = el.card.offsetHeight;
+  // The placard sits below the chapter title (which also dims while reading), beside the held
+  // memory. If it can't fit under the title, its picture shrinks.
+  const s = world.screenOf(world.grabbed), w = el.card.offsetWidth;
+  const titleBottom = el.line.getBoundingClientRect().bottom + 14, floor = innerHeight - 96;
+  el.card.classList.toggle('compact', el.card.offsetHeight > floor - titleBottom && !el.card.classList.contains('compact') ? true : el.card.classList.contains('compact') && floor - titleBottom < 520);
+  const h = el.card.offsetHeight;
   let x = s.x + 70;
   if (x + w > innerWidth - 16) x = s.x - w - 70;
-  const top = Math.max(innerHeight * 0.44, Math.min(innerHeight - h - 96, s.y - h / 2));
+  const top = Math.max(titleBottom, Math.min(floor - h, s.y - h / 2));
   el.card.style.left = Math.max(16, Math.min(innerWidth - w - 16, x)) + 'px';
-  el.card.style.top = Math.min(top, innerHeight - h - 96) + 'px';
+  el.card.style.top = Math.max(Math.min(top, floor - h), 70) + 'px';
 }
 
 /* -------------------------------------------------------------- BOOT */
@@ -644,5 +599,5 @@ if (DEMO) {
   el.chipCam.classList.add('live');
   toggleSound(); toggleSound(); // sync button label (demo starts muted)
 }
-window.__handGesture = { S, world, STORY, handleHands, openMap }; // for tests and debugging // for tests and debugging
+window.__handGesture = { S, world, STORY, handleHands, openMap }; // for tests and debugging
 requestAnimationFrame(frame);

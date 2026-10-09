@@ -21,10 +21,8 @@ index.html ── importmap (three, @mediapipe/tasks-vision, served from /vendor
 
 ## Input pipeline
 
-1. **Camera** → MediaPipe HandLandmarker (`numHands: 2`, VIDEO mode, GPU delegate with CPU fallback) → up to two 21-point hands per frame.
-2. `handleHands()`:
-   - two hands → `handsApart()` → `createSpreadDetector()` → open/close the **chapter map**
-   - picks the **primary hand** (closest to the current pointer, for steady grabs) → `handleLandmarks()`
+1. **Camera** → MediaPipe HandLandmarker (`numHands: 1`, VIDEO mode, GPU delegate with CPU fallback) → one 21-point hand per frame.
+2. `handleHands()` → `handleLandmarks()` (one hand drives everything; the chapter map opens from its button, the C key or the voice command "map").
 3. `handleLandmarks()` → pointer (thumb-index midpoint, mirrored), **pinch** with hysteresis (grab/release or pick on the map), **open palm** held 550 ms (wake), **snap arming** (thumb touches middle finger).
 4. **Snap** = mic high-band (2.2–9 kHz) onset **and** armed within 600 ms. No mic → silent "flick" snap from pose alone.
 5. **Voice (OLI)**: Web Speech API, continuous, keyword commands.
@@ -35,7 +33,9 @@ All thresholds are ratios of hand size, so they work near and far from the camer
 ## Rendering
 
 - 3D: one WebGL renderer, additive point sprites, per-chapter colour lerp, set pieces swapped and disposed per chapter.
-- Hand: 2D overlay canvas. A **human-shaped hand of light** (palm, tapered fingers, knuckles, nails) in the chapter colour, drawn opaque offscreen then composited translucent; the glow is a wider copy of the shapes. **Do not use canvas `shadowBlur` with `drawImage`** here: it left ghost hands in some rasterizers.
+- Hand: 2D overlay canvas, the original **glowing skeleton** (bones, joints, accent fingertips) plus the OLI HUD. **Do not use canvas `shadowBlur` together with `drawImage`** on this canvas: it left ghost hands in some rasterizers.
+- Placard pictures: photos (shown whole, `object-fit: contain`), or original SVG art from `src/art.js` (cinema marquee with film titles, soccer ball). No posters or characters.
+- Roots wildlife: Minecraft-style animals built from lit boxes (`voxAnimal` in setpieces.js) with walking legs.
 - UI: HTML/CSS layers (title, museum placard, captions, HUD, chapter map, boot sequence, title cards, letterbox, grain).
 
 ## Audio
@@ -45,8 +45,8 @@ All thresholds are ratios of hand size, so they work near and far from the camer
 
 ## Testing
 
-- `npm test`: gesture math, spread detector, story integrity (assets exist, 3–5 memories, valid music/scene, no em dashes).
-- `npm run smoke` (Playwright): demo wake/grab/snap, all chapters in mouse mode with **layout checks** (orbs and placards never cover the title), two-hand spread → map → jump, **phone** (390×844 touch: tap, hold, next, swipe, map, no overflow), fake-camera boot.
+- `npm test`: gesture math, story integrity (assets exist, 3–5 memories, valid music/scene, https links, no em dashes).
+- `npm run smoke` (Playwright): demo wake/grab/snap, all chapters in mouse mode with **layout checks** (orbs and placards never cover the title), chapter map → jump, **phone** (390×844 touch: tap, hold, next, swipe, map, no overflow), fake-camera boot.
 - CI runs both on every push/PR and uploads screenshots.
 
 ## Privacy

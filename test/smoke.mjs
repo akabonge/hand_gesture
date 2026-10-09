@@ -79,20 +79,11 @@ try {
   if (s.ch !== 0) fail(`mouse: did not loop back to chapter 1 (ch=${s.ch})`);
   await m.close();
 
-  // 2b) Two-hand spread opens the chapter map; a map click jumps chapters.
+  // 2b) Chapter map (button) jumps chapters.
   const t2 = await page('/');
   await t2.click('#btn-mouse'); await t2.waitForTimeout(600);
-  const opened = await t2.evaluate(async () => {
-    const { synthHand } = await import('/src/demo.js');
-    const { handleHands, S } = window.__handGesture;
-    let now = performance.now();
-    S.mode = 'camera';
-    handleHands([synthHand(0.45, 0.75), synthHand(0.55, 0.75)], now);
-    handleHands([synthHand(0.15, 0.75), synthHand(0.85, 0.75)], now + 400);
-    const open = S.mapOpen; S.mode = 'mouse';
-    return open;
-  });
-  if (!opened) fail('two hands: spread did not open the chapter map');
+  await t2.click('#btn-map'); await t2.waitForTimeout(500);
+  if (!(await t2.evaluate(() => window.__handGesture.S.mapOpen))) fail('chapter map did not open');
   if (shots) await t2.screenshot({ path: 'test-results/chapter-map.png' });
   await t2.locator('.map-node').nth(4).click();
   await t2.waitForTimeout(1200);

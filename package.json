@@ -10,7 +10,7 @@
     "serve": "node scripts/serve.mjs",
     "test": "node --test test/*.test.mjs",
     "smoke": "node test/smoke.mjs",
-    "check": "node --check src/main.js && node --check src/world.js && node --check src/setpieces.js && node --check src/gestures.js && node --check src/demo.js && node --check src/story.js"
+    "check": "node --check src/main.js && node --check src/world.js && node --check src/setpieces.js && node --check src/gestures.js && node --check src/demo.js && node --check src/story.js && node --check src/music.js && node --check src/art.js"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.14",

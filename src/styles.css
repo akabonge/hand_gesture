@@ -49,7 +49,7 @@ body.cinema .bar { height: 11vh }
 body.mode-mouse #controls .nav, body.mode-mouse #btn-map, body.mode-camera #btn-map { display: inline-block }
 .mini.nav { font-size: 14px; padding: 6px 12px }
 
-/* Chapter map (two-hand spread) */
+/* Chapter map */
 #chapmap { position: fixed; inset: 0; z-index: 9; background: radial-gradient(ellipse at 50% 60%, rgba(20, 14, 34, .82), rgba(4, 3, 10, .94)); opacity: 0; pointer-events: none; transition: opacity .5s }
 #chapmap.show { opacity: 1; pointer-events: auto }
 .map-head { position: absolute; top: 9vh; left: 0; right: 0; text-align: center; padding: 0 16px }
@@ -91,12 +91,19 @@ body.reading #caption.show { opacity: .2 }
   transition: opacity .45s ease, transform .45s ease; left: 50%; top: 50% }
 #card.show { opacity: 1; transform: none }
 #card img[hidden] { display: none }
-#card img { display: block; width: 100%; height: 118px; object-position: 50% 25%; object-fit: cover; border-radius: 3px; margin-bottom: 14px; filter: saturate(.9) }
+#card img { display: block; width: 100%; height: 170px; object-fit: contain; background: rgba(0, 0, 0, .35); border-radius: 3px; margin-bottom: 14px; filter: saturate(.9) }
 #card .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .24em; color: var(--accent); text-transform: uppercase }
 #card h3 { font-weight: 600; font-size: 24px; margin: 8px 0 4px; letter-spacing: -.01em }
 #card .meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--ink-dim); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--line) }
 #card .meta:empty { display: none }
 #card p { font-size: 15.5px; line-height: 1.5; color: var(--ink-dim) }
+#c-links { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 12px }
+#c-links:empty { display: none }
+#c-links a { pointer-events: none; font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; padding-bottom: 1px }
+#c-links a::after { content: " \2197" }
+#card.show #c-links a { pointer-events: auto }
+#card.show #c-links a:hover { color: var(--ink) }
+#card.compact img { height: 104px }
 
 /* Hint */
 #hint { position: fixed; z-index: 5; left: 50%; bottom: 30px; transform: translateX(-50%); font-family: var(--mono); font-size: 12px; letter-spacing: .16em;
@@ -161,6 +168,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
   #hint { bottom: 76px; font-size: 11px }
   #caption { bottom: 124px }
   #card { width: min(300px, 86vw) }
+  #card img { height: 140px }
   #controls { left: 50%; right: auto; transform: translateX(-50%); bottom: 22px; flex-wrap: nowrap }
   #btn-preview { display: none }
   /* Phone: the constellation becomes a two-column list */
